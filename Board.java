@@ -1,3 +1,7 @@
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Scanner; // Boardクラスでは通常Scannerは不要ですが、元のコードにあったため残します
+
 public class Board {
     private Piece[][] boardArray;
     private static final int ROWS = 4;
@@ -40,19 +44,24 @@ public class Board {
         return isValidCoordinate(row, col) && boardArray[row][col] == null;
     }
 
+    /**
+     * 盤面を整形して表示します。行と列の番号も表示されます。
+     */
     public void printBoard() {
-        System.out.println("-------------");
+        // 列番号の表示
+        System.out.println("     0    1    2"); // 列番号
+        System.out.println("  ----------------"); // 上部の境界線
         for (int i = 0; i < ROWS; i++) {
-            System.out.print("|");
+            System.out.print(i + " |"); // 行番号
             for (int j = 0; j < COLS; j++) {
                 Piece piece = boardArray[i][j];
                 if (piece == null) {
-                    System.out.print("   |"); // 空きマス
+                    System.out.print("    |"); // 空きマス
                 } else {
                     System.out.print(" " + piece.getSymbol() + " |"); // 駒のシンボルを表示
                 }
             }
-            System.out.println("\n-------------");
+            System.out.println("\n  ----------------"); // 各行の下部の境界線
         }
     }
 }
