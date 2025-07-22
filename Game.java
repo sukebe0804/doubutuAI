@@ -164,14 +164,6 @@ public class Game {
     }
 
     private void handleCpuTurn() {
-        System.out.println("Player1(CPU)が考え中です...");
-        try {
-            Thread.sleep(1500);
-        } catch (InterruptedException e) {
-            Thread.currentThread().interrupt();
-            System.out.println("Player1(CPU)の思考が中断されました！");
-        }
-
         // ランダムプレイヤーに手を選ばせる（移動と打つ手を含む）
         int[] move = ((RandomPlayer)cpuPlayer).chooseRandomMove(this);
         if (move != null) {
@@ -183,9 +175,6 @@ public class Game {
                 System.out.println("Player1(CPU)は " + move[0] + "," + move[1] + " から " + move[2] + "," + move[3] + " へ動かします！");
                 performMove(move[0], move[1], move[2], move[3]);
             }
-        } else {
-            System.out.println("Player1(CPU)、動ける駒も打てる手駒もありません...");
-            // この場合、ゲームが膠着状態になる可能性もあるため、千日手などのロジックも必要になる
         }
     }
 
