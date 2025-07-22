@@ -16,8 +16,6 @@ public class Game {
 
     public Game() {
         board = new Board();
-        humanPlayer = new Player("Player2"); // Human Player (後手)
-        cpuPlayer = new RandomPlayer("Player1"); // CPU Player (先手)
         scanner = new Scanner(System.in);
 
         // プレイヤータイプを明示的に設定 (Player1がCPU、Player2が人間)

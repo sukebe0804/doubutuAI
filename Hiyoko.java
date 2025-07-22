@@ -16,7 +16,7 @@ public class Hiyoko extends Piece {
             // にわとりの動き(今回は, 将棋の「金」と同じ動き方に設定)
             int[][] deltas = {
                 {-1, 0}, {1, 0}, {0, -1}, {0, 1}, // 上下左右
-                {-1, 1}, {1, 1} // 斜め
+                {-1, -1}, {-1, 1} // 斜め
             };
             for (int[] delta : deltas) {
                 int newRow = currentRow + delta[0];
