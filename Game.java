@@ -54,7 +54,7 @@ public class Game implements Cloneable {
         PlayerA.setPlayerType(PlayerType.PLAYER1);
         PlayerB.setPlayerType(PlayerType.PLAYER2);
 
-        currentPlayer = this.PlayerA; // PlayerA, or Bどちらを先手にするかはここで指定する.
+        currentPlayer = this.PlayerB; // PlayerA, or Bどちらを先手にするかはここで指定する.
         initializeGame();
     }
 
@@ -424,8 +424,6 @@ public class Game implements Cloneable {
         return dropSuccessful && !simulatedGame.isKingInCheck(playerType);
     }
 
-    // --------------------ここからプログラムを追加(西岡)-----------------------
-
     public void makeMove(int fromRow, int fromCol, int toRow, int toCol) {
         Piece pieceToMove = board.getPiece(fromRow, fromCol);
 
@@ -485,8 +483,6 @@ public class Game implements Cloneable {
         // 盤面に駒を配置
         board.placePiece(pieceToDrop, toRow, toCol);
     }
-
-    // --------------------ここまでプログラムを追加(西岡)-----------------------
 
 
     // 王手、詰み、トライの判定と勝者決定
@@ -632,5 +628,49 @@ public class Game implements Cloneable {
     // PlayerBを取得するメソッド
     public Player getPlayerB() {
         return PlayerB;
+    }
+
+    public static void runSimulations(int numGames) {
+        int player1Wins = 0;
+        int player2Wins = 0;
+        int draws = 0; // 引き分けをカウント
+
+        System.out.println("--- シミュレーション開始 (全 " + numGames + " ゲーム) ---");
+
+        for (int i = 0; i < numGames; i++) {
+            System.out.println("ゲーム " + (i + 1) + " / " + numGames);
+            Game game = new Game();
+            game.setSilentMode(true); // シミュレーション中はサイレントモードを有効にする
+            
+            PlayerType winner = null;
+            // 盤面の状態が同じ手数が連続した場合、引き分けと判定するためのカウンタ
+            // ここでは簡易的に、ゲームが進行しない場合の無限ループを避けるための一時的な対策として、
+            // 一定のターン数を超えたら引き分けと見なす
+            int turnCount = 0;
+            final int MAX_TURNS = 500; // 最大ターン数。これを超えたら引き分けと見なす
+
+            while (winner == null && turnCount < MAX_TURNS) {
+                game.handleCpuTurn();
+                winner = game.isGameOver();
+                if (winner == null) { // 勝者がまだ決まっていない場合のみプレイヤーを切り替える
+                    game.switchPlayer();
+                }
+                turnCount++;
+            }
+
+            if (winner == PlayerType.PLAYER1) {
+                player1Wins++;
+            } else if (winner == PlayerType.PLAYER2) {
+                player2Wins++;
+            } else {
+                draws++; // 最大ターン数を超過した場合は引き分け
+            }
+        }
+
+        System.out.println("--- シミュレーション結果 ---");
+        System.out.println("PlayerA (RandomPlayer) の勝利数: " + player1Wins);
+        System.out.println("PlayerB (MinMax) の勝利数: " + player2Wins);
+        System.out.println("引き分け数: " + draws);
+        System.out.println("--- シミュレーション終了 ---");
     }
 }

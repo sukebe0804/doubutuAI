@@ -6,14 +6,14 @@ import java.util.Random;
 
 public class MinMax extends Player {
     // 探索の深さ
-    private static final int MAX_DEPTH = 10; 
+    private static final int MAX_DEPTH = 1; 
 
     // 駒の基本価値
     private static final int LION_VALUE = 10000; // ライオンの価値を高く設定（詰み/トライはこれよりはるかに高い）
     private static final int KIRIN_VALUE = 300;
     private static final int ZOU_VALUE = 300;
     private static final int HIYOKO_VALUE = 100;
-    private static final int NIWATORI_VALUE = 500; // 成ったひよこの価値を高く設定
+    private static final int NIWATORI_VALUE = 300; // 成ったひよこの価値を高く設定
 
     // 評価定数
     private static final int LION_SAFETY_BONUS_PER_DEFENDER = 50; // ライオンを守る味方駒1つあたりのボーナスを強化
