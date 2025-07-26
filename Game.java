@@ -630,6 +630,7 @@ public class Game implements Cloneable {
         return PlayerB;
     }
 
+    //  ---------------------ここから新メソッドを追加(西岡)------------------------
     public static void runSimulations(int numGames) {
         int player1Wins = 0;
         int player2Wins = 0;
@@ -673,4 +674,5 @@ public class Game implements Cloneable {
         System.out.println("引き分け数: " + draws);
         System.out.println("--- シミュレーション終了 ---");
     }
+    //  ---------------------ここまで新メソッドを追加(西岡)------------------------
 }
