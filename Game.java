@@ -59,14 +59,13 @@ public class Game implements Cloneable {
     }
 
     private void initializeGame() {
-        // 標準的な初期配置 (Player1がCPU、Player2が人間)
-        // PLAYER1 (CPU) の駒
+        // PLAYER1の駒
         board.placePiece(new Kirin(PlayerType.PLAYER1), 0, 0);
         board.placePiece(new Lion(PlayerType.PLAYER1), 0, 1);
         board.placePiece(new Zou(PlayerType.PLAYER1), 0, 2);
         board.placePiece(new Hiyoko(PlayerType.PLAYER1), 1, 1);
 
-        // PLAYER2 (人間) の駒
+        // PLAYER2の駒
         board.placePiece(new Zou(PlayerType.PLAYER2), 3, 0);
         board.placePiece(new Lion(PlayerType.PLAYER2), 3, 1);
         board.placePiece(new Kirin(PlayerType.PLAYER2), 3, 2);
@@ -424,6 +423,70 @@ public class Game implements Cloneable {
         
         return dropSuccessful && !simulatedGame.isKingInCheck(playerType);
     }
+
+    // --------------------ここからプログラムを追加(西岡)-----------------------
+
+    public void makeMove(int fromRow, int fromCol, int toRow, int toCol) {
+        Piece pieceToMove = board.getPiece(fromRow, fromCol);
+
+        // 移動先に駒がある場合は捕獲
+        Piece capturedPiece = board.getPiece(toRow, toCol);
+        if (capturedPiece != null) {
+            // 捕獲された駒を相手の手駒に追加
+            // currentPlayer の情報ではなく、pieceToMove の owner に基づいて判断
+            if (pieceToMove.getOwner() == PlayerType.PLAYER1) {
+                PlayerA.addCapturedPiece(capturedPiece);
+            } else {
+                PlayerB.addCapturedPiece(capturedPiece);
+            }
+        }
+
+        // 駒を移動
+        board.removePiece(fromRow, fromCol);
+        board.placePiece(pieceToMove, toRow, toCol);
+
+        // 成りの判定 (ひよこのみ)
+        if (pieceToMove instanceof Hiyoko) {
+            // ひよこが敵陣最奥に到達した場合に成る
+            if (pieceToMove.getOwner() == PlayerType.PLAYER1 && toRow == Board.ROWS - 1) { // Player1が敵陣最奥 (行3)
+                ((Hiyoko) pieceToMove).promote();
+            } else if (pieceToMove.getOwner() == PlayerType.PLAYER2 && toRow == 0) { // Player2が敵陣最奥 (行0)
+                ((Hiyoko) pieceToMove).promote();
+            }
+        }
+        
+        // ライオンがトライしたかどうかのチェック (AIシミュレーション中は直接勝利判定には影響しないが、状態は更新)
+        if (pieceToMove instanceof Lion) {
+            if (pieceToMove.getOwner() == PlayerType.PLAYER1 && toRow == 0) { // Player1のライオンが敵陣の最奥に到達
+                trialPlayer = PlayerType.PLAYER1;
+                trialRow = toRow;
+                trialCol = toCol;
+            } else if (pieceToMove.getOwner() == PlayerType.PLAYER2 && toRow == Board.ROWS - 1) { // Player2のライオンが敵陣の最奥に到達
+                trialPlayer = PlayerType.PLAYER2;
+                trialRow = toRow;
+                trialCol = toCol;
+            } else {
+                // トライ位置から離れたらリセット
+                trialPlayer = null;
+                trialRow = -1;
+                trialCol = -1;
+            }
+        }
+    }
+
+    public void makeDrop(Piece pieceToDrop, int toRow, int toCol) {
+        // 手駒リストから駒を削除
+        // pieceToDrop の owner に基づいて、どちらのプレイヤーの手駒かを判断
+        if (pieceToDrop.getOwner() == PlayerType.PLAYER1) {
+            PlayerA.removeCapturedPiece(pieceToDrop);
+        } else {
+            PlayerB.removeCapturedPiece(pieceToDrop);
+        }
+        // 盤面に駒を配置
+        board.placePiece(pieceToDrop, toRow, toCol);
+    }
+
+    // --------------------ここまでプログラムを追加(西岡)-----------------------
 
 
     // 王手、詰み、トライの判定と勝者決定
