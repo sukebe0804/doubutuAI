@@ -1,7 +1,7 @@
 import java.util.ArrayList;
 import java.util.List;
 
-public class Lion extends Piece {
+public class Lion extends Piece implements Cloneable {
 
     public Lion(PlayerType owner) {
         super(owner);
@@ -36,5 +36,10 @@ public class Lion extends Piece {
     public String getSymbol() {
         // プレイヤー1 (先手) は日本語、プレイヤー2 (後手) はカタカナ
         return (owner == PlayerType.PLAYER1) ? "獅" : "ラ";
+    }
+    //clone()実装
+    @Override
+    public Lion clone() {
+        return (Lion) super.clone(); // フィールドが不変ならこれで十分
     }
 }

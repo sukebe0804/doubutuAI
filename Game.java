@@ -2,27 +2,59 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Scanner;
 
-public class Game {
+public class Game implements Cloneable {
     private Board board;
-    private Player humanPlayer;
-    private RandomPlayer cpuPlayer;
-    private Player currentPlayer;
     private Scanner scanner;
+    private boolean silentMode = false; // サイレントモードフラグ
+    private Player currentPlayer;
+
+    // PlayerAの指定
+    private RandomPlayer PlayerA; // ランダムプレイヤー
+    // private HumanPlayer PlayerA;
+
+    // -----------------------------------------------------------------------
+
+    // AIごとの変更点その1
+    // 自分で作成した(AIname).javaのクラスのインスタンスをGame.javaで宣言.
+    // 対戦時に使用するAIを切り替えるのに使用.
+    // 作成者名をコードの隣に記述してほしい!
+    // とりあえず今はRandomPlayerをPlayerAにしてるからPlayerBのとこに各自でかいとってー
+
+    // PlayerBの指定
+    // 例: 西岡の作成したAI(MinMax.java)の場合、以下のように記述する.
+    // private 変数のデータ型 変数(ここはPlayerB固定)
+    private MinMax PlayerB; // 西岡
+
+    // -----------------------------------------------------------------------
+
 
     // トライルール関連のフィールド
     private PlayerType trialPlayer = null; // トライしたプレイヤーのタイプを保持
     private int trialRow = -1;             // トライしたライオンの行座標
     private int trialCol = -1;             // トライしたライオンの列座標
-
+    
     public Game() {
         board = new Board();
         scanner = new Scanner(System.in);
+        this.PlayerA = new RandomPlayer("RandomPlayer");
+        // this.PlayerA = new HumanPlayer("Human");
 
-        // プレイヤータイプを明示的に設定 (Player1がCPU、Player2が人間)
-        humanPlayer.setPlayerType(PlayerType.PLAYER2);
-        cpuPlayer.setPlayerType(PlayerType.PLAYER1);
+        // -----------------------------------------------------------------------
 
-        currentPlayer = cpuPlayer; // 最初に動くのはPlayer1 (CPU)
+        // AIごとの変更点その2
+        // 例: 西岡の作成したAI(MinMax.java)の場合、以下のように記述する.
+        // this.PlayerB = new 変数の型("作成したAIの名前")
+        this.PlayerB = new MinMax("MinMax"); // 西岡
+
+        // -----------------------------------------------------------------------
+
+        System.out.println("PlayerA: " + PlayerA);
+        System.out.println("PlayerB: " + PlayerB);
+
+        PlayerA.setPlayerType(PlayerType.PLAYER1);
+        PlayerB.setPlayerType(PlayerType.PLAYER2);
+
+        currentPlayer = this.PlayerA; // PlayerA, or Bどちらを先手にするかはここで指定する.
         initializeGame();
     }
 
@@ -51,7 +83,7 @@ public class Game {
 
             System.out.println("--- " + currentPlayer.getName() + "の番です ---");
 
-            if (currentPlayer == humanPlayer) {
+            if (currentPlayer instanceof HumanPlayer) {
                 handleHumanTurn();
             } else {
                 handleCpuTurn();
@@ -69,28 +101,30 @@ public class Game {
         
         // ゲームが終了したら勝者メッセージを表示
         if (winner == PlayerType.PLAYER1) {
-            System.out.println("Player1(CPU)の勝利！");
+            System.out.println("PlayerAの勝利！");
         } else if (winner == PlayerType.PLAYER2) {
-            System.out.println("Player2(あなた)の勝利！");
+            System.out.println("PlayerBの勝利！");
         }
         System.out.println("--- ゲーム終了 ---");
         scanner.close();
     }
 
     private void printCapturedPieces() {
-        System.out.print("Player1(CPU)の手駒: ");
-        if (cpuPlayer.getCapturedPieces().isEmpty()) {
+        System.out.print("PlayerAの手駒: ");
+        // PlayerAはPlayerType.PLAYER1
+        if (PlayerA.getCapturedPieces().isEmpty()) { // PlayerAのcapturedPiecesを表示
             System.out.println("なし");
         } else {
-            cpuPlayer.getCapturedPieces().forEach(p -> System.out.print(p.getSymbol() + " "));
+            PlayerA.getCapturedPieces().forEach(p -> System.out.print(p.getSymbol() + " "));
             System.out.println();
         }
 
-        System.out.print("Player2(あなた)の手駒: ");
-        if (humanPlayer.getCapturedPieces().isEmpty()) {
+        System.out.print("PlayerBの手駒: ");
+        // PlayerBはPlayerType.PLAYER2
+        if (PlayerB.getCapturedPieces().isEmpty()) { // PlayerBのcapturedPiecesを表示
             System.out.println("なし");
         } else {
-            humanPlayer.getCapturedPieces().forEach(p -> System.out.print(p.getSymbol() + " "));
+            PlayerB.getCapturedPieces().forEach(p -> System.out.print(p.getSymbol() + " "));
             System.out.println();
         }
     }
@@ -111,7 +145,13 @@ public class Game {
                     int toRow = scanner.nextInt();
                     int toCol = scanner.nextInt();
 
-                    moveMade = performMove(fromRow, fromCol, toRow, toCol);
+                    // 実際の手番でのperformMoveは、isKingInCheckによる合法性チェックを含まない
+                    // そのため、ここではisValidMoveAndNotIntoCheckを呼び出して事前にチェックする
+                    if (isValidMoveAndNotIntoCheck(currentPlayer.getPlayerType(), fromRow, fromCol, toRow, toCol)) {
+                         moveMade = performMove(fromRow, fromCol, toRow, toCol);
+                    } else {
+                        System.out.println("その手は無効です。自分のライオンが王手になります。");
+                    }
 
                     if (!moveMade) {
                         System.out.println("その手は無効です。別の手を試してください。");
@@ -144,7 +184,13 @@ public class Game {
                     int dropRow = scanner.nextInt();
                     int dropCol = scanner.nextInt();
 
-                    moveMade = performDrop(pieceToDrop, dropRow, dropCol);
+                    // 実際の手番でのperformDropは、isKingInCheckによる合法性チェックを含まない
+                    // そのため、ここではisValidDropAndNotIntoCheckを呼び出して事前にチェックする
+                    if (isValidDropAndNotIntoCheck(currentPlayer.getPlayerType(), pieceToDrop, dropRow, dropCol)) {
+                        moveMade = performDrop(pieceToDrop, dropRow, dropCol);
+                    } else {
+                        System.out.println("そこには打てません。自分のライオンが王手になります。");
+                    }
 
                     if (!moveMade) {
                         System.out.println("そこには打てません。別の手を試してください。");
@@ -162,24 +208,33 @@ public class Game {
     }
 
     private void handleCpuTurn() {
-        // ランダムプレイヤーに手を選ばせる（移動と打つ手を含む）
-        int[] move = ((RandomPlayer)cpuPlayer).chooseRandomMove(this);
+        // AIに手を選ばせる（移動と打つ手を含む）
+        // 現在のプレイヤー（currentPlayer）のchooseMoveメソッドを呼び出す
+        printIfNotSilent("AI is thinking...");
+        int[] move = currentPlayer.chooseMove(this); // ここを修正
+
         if (move != null) {
+            // CPUの実際の手番ではサイレントモードを無効にしてメッセージを表示
+            setSilentMode(false); 
             if (move[0] == -1) { // 手駒を打つ手
-                Piece pieceToDrop = cpuPlayer.getCapturedPieces().get(move[1]);
-                System.out.println("Player1(CPU)は「" + pieceToDrop.getSymbol() + "」を " + move[2] + "," + move[3] + " に打ちます！");
+                // chooseMove内で合法性チェック済みのため、ここではそのまま実行
+                // currentPlayerの手駒リストから駒を取得
+                Piece pieceToDrop = currentPlayer.getCapturedPieces().get(move[1]); // ここを修正
+                System.out.println(currentPlayer.getName() + "は「" + pieceToDrop.getSymbol() + "」を " + move[2] + "," + move[3] + " に打ちます！");
                 performDrop(pieceToDrop, move[2], move[3]);
             } else { // 駒の移動
-                System.out.println("Player1(CPU)は " + move[0] + "," + move[1] + " から " + move[2] + "," + move[3] + " へ動かします！");
+                // chooseMove内で合法性チェック済みのため、ここではそのまま実行
+                System.out.println(currentPlayer.getName() + "は" + move[0] + "," + move[1] + " から " + move[2] + "," + move[3] + " へ動かします！");
                 performMove(move[0], move[1], move[2], move[3]);
             }
+        } else {
+            // AIが合法手を見つけられない場合（詰み、またはバグ）
+            printIfNotSilent("AIは合法手を見つけられませんでした。");
         }
     }
 
-    /**
-     * 駒を動かす処理
-     */
-    private boolean performMove(int fromRow, int fromCol, int toRow, int toCol) {
+    // 駒を動かす処理
+    public boolean performMove(int fromRow, int fromCol, int toRow, int toCol) {
         Piece pieceToMove = board.getPiece(fromRow, fromCol);
 
         if (pieceToMove == null || pieceToMove.getOwner() != currentPlayer.getPlayerType()) {
@@ -194,6 +249,7 @@ public class Game {
                 break;
             }
         }
+
         if (!isValidMove) {
             return false; // 不正な移動先
         }
@@ -202,7 +258,7 @@ public class Game {
         if (capturedPiece != null) {
             // 相手の駒であれば手駒にする
             currentPlayer.addCapturedPiece(capturedPiece);
-            System.out.println(currentPlayer.getName() + "は相手の「" + capturedPiece.getSymbol() + "」を捕獲しました！");
+            printIfNotSilent(currentPlayer.getName() + "は相手の「" + capturedPiece.getSymbol() + "」を捕獲しました！");
         }
 
         board.removePiece(fromRow, fromCol);
@@ -211,22 +267,20 @@ public class Game {
         // ひよこの成り判定
         if (pieceToMove instanceof Hiyoko && !pieceToMove.isPromoted()) {
             // 自分の駒が敵陣の一番奥に到達した場合に成る
-            // Player1(CPU)の場合はrow=3、Player2(人間)の場合はrow=0
+            // PlayerAの場合はrow=3、Player2(人間)の場合はrow=0
             if (currentPlayer.getPlayerType() == PlayerType.PLAYER1 && toRow == 3) {
-                 pieceToMove.promote();
-                 System.out.println(currentPlayer.getName() + "の「ひよこ」が「にわとり」に成りました！");
+                pieceToMove.promote();
+                printIfNotSilent(currentPlayer.getName() + "の「ひよこ」が「にわとり」に成りました！");
             } else if (currentPlayer.getPlayerType() == PlayerType.PLAYER2 && toRow == 0) {
-                 pieceToMove.promote();
-                 System.out.println(currentPlayer.getName() + "の「ひよこ」が「にわとり」に成りました！");
+                pieceToMove.promote();
+                printIfNotSilent(currentPlayer.getName() + "の「ひよこ」が「にわとり」に成りました！");
             }
         }
         return true;
     }
 
-    /**
-     * 手駒を打つ処理
-     */
-    private boolean performDrop(Piece pieceToDrop, int dropRow, int dropCol) { 
+    // 手駒を打つ処理
+    public boolean performDrop(Piece pieceToDrop, int dropRow, int dropCol) {
         if (!board.isValidCoordinate(dropRow, dropCol)) {
             return false;
         }
@@ -236,166 +290,284 @@ public class Game {
 
         currentPlayer.removeCapturedPiece(pieceToDrop);
         board.placePiece(pieceToDrop, dropRow, dropCol);
-        System.out.println(currentPlayer.getName() + "は手駒の「" + pieceToDrop.getSymbol() + "」を" + dropRow + "," + dropCol + "に打ちました！");
+        printIfNotSilent(currentPlayer.getName() + "は手駒の「" + pieceToDrop.getSymbol() + "」を" + dropRow + "," + dropCol + "に打ちました！");
         return true;
     }
 
-    /**
-     * ゲームが終了したかどうかと、終了した場合の勝者（PlayerType）を返します。
-     * ゲームが継続する場合は null を返します。
-     */
-    private PlayerType isGameOver() {
-        boolean humanLionExists = false; // Player2 (人間) のライオンの存在
-        boolean cpuLionExists = false;   // Player1 (CPU) のライオンの存在
-
-        // ライオンの存在チェック
-        for (int r = 0; r < 4; r++) {
-            for (int c = 0; c < 3; c++) {
-                Piece piece = board.getPiece(r, c);
-                if (piece instanceof Lion) {
-                    if (piece.getOwner() == PlayerType.PLAYER2) { // Player2 (人間)
-                        humanLionExists = true;
-                    } else { // Player1 (CPU)
-                        cpuLionExists = true;
-                    }
-                }
-            }
+    // プレイヤーの切り替え
+    public void switchPlayer() { // private から public に変更
+        if (currentPlayer == PlayerA) {
+            currentPlayer = PlayerB;
+        } else {
+            currentPlayer = PlayerA;
         }
-
-        // ライオンが捕獲された場合
-        if (!cpuLionExists) { // Player1 (CPU) のライオンがいない = Player2 (人間) の勝利
-            // System.out.println("Player1(CPU)のライオンが捕獲されました！ Player2(あなた)の勝利！"); // メッセージを削除
-            return PlayerType.PLAYER2;
-        }
-        if (!humanLionExists) { // Player2 (人間) のライオンがいない = Player1 (CPU) の勝利
-            // System.out.println("Player2(あなた)のライオンを捕獲しました！ Player1(CPU)の勝利！"); // メッセージを削除
-            return PlayerType.PLAYER1;
-        }
-
-        // --- トライルールの見直し部分 ---
-
-        // 前のターンでトライ状態に入ったプレイヤーがいるか
-        if (trialPlayer != null) {
-            // トライしたライオンがまだその位置にいて、かつそのプレイヤーのライオンであるかを確認
-            Piece trialLion = board.getPiece(trialRow, trialCol);
-            
-            if (trialLion instanceof Lion && trialLion.getOwner() == trialPlayer) {
-                // 相手のプレイヤータイプを取得
-                PlayerType opponentType = (trialPlayer == PlayerType.PLAYER1) ? PlayerType.PLAYER2 : PlayerType.PLAYER1;
-                
-                // 相手が次の手でライオンを確実に取れるかチェック
-                if (canOpponentCaptureLion(opponentType, trialRow, trialCol)) {
-                    // 相手がライオンを「確実に取れる」場合 -> トライしたプレイヤーの負け
-                    System.out.println(trialPlayer.name() + "のライオンは敵陣に到達しましたが、相手に確実に取られるため敗北！");
-                    PlayerType winner = (trialPlayer == PlayerType.PLAYER1) ? PlayerType.PLAYER2 : PlayerType.PLAYER1;
-                    trialPlayer = null; // トライ状態をリセット
-                    trialRow = -1;
-                    trialCol = -1;
-                    return winner; // ゲーム終了、勝者を返す
-                } else {
-                    // 相手がライオンを「取れない」場合 -> トライしたプレイヤーの勝利
-                    System.out.println(trialPlayer.name() + "のライオンが敵陣で生き残り、相手に取られないため勝利！");
-                    PlayerType winner = trialPlayer;
-                    trialPlayer = null; // トライ状態をリセット
-                    trialRow = -1;
-                    trialCol = -1;
-                    return winner; // ゲーム終了、勝者を返す
-                }
-            } else {
-                // ライオンが取られたか動かされたため、トライ状態をリセット
-                System.out.println(trialPlayer.name() + "のライオンは敵陣で捕獲されたか移動しました。トライは無効になります。");
-                trialPlayer = null;
-                trialRow = -1;
-                trialCol = -1;
-            }
-        }
-
-        // 新たなトライの判定（現在のターンでライオンが敵陣に到達したか）
-        // currentPlayerは現在の手番のプレイヤー
-        
-        // Player1 (CPU) のライオンが敵陣（row=3）に到達した場合
-        if (currentPlayer.getPlayerType() == PlayerType.PLAYER1) {
-            for (int c = 0; c < 3; c++) {
-                Piece piece = board.getPiece(3, c);
-                if (piece instanceof Lion && piece.getOwner() == PlayerType.PLAYER1) {
-                    // 新規のトライの場合のみ設定 (既にトライ状態であれば更新しない)
-                    if (trialPlayer == null) {
-                        trialPlayer = PlayerType.PLAYER1;
-                        trialRow = 3;
-                        trialCol = c;
-                        System.out.println("Player1(CPU)のライオンが敵陣に到達しました！相手の次の手で取られなければ勝利です。");
-                    }
-                    return null; // ゲームはまだ終了しない
-                }
-            }
-        }
-        // Player2 (人間) のライオンが敵陣（row=0）に到達した場合
-        else if (currentPlayer.getPlayerType() == PlayerType.PLAYER2) {
-            for (int c = 0; c < 3; c++) {
-                Piece piece = board.getPiece(0, c);
-                if (piece instanceof Lion && piece.getOwner() == PlayerType.PLAYER2) {
-                    // 新規のトライの場合のみ設定 (既にトライ状態であれば更新しない)
-                    if (trialPlayer == null) {
-                        trialPlayer = PlayerType.PLAYER2;
-                        trialRow = 0;
-                        trialCol = c;
-                        System.out.println("Player2(あなた)のライオンが敵陣に到達しました！相手の次の手で取られなければ勝利です。");
-                    }
-                    return null; // ゲームはまだ終了しない
-                }
-            }
-        }
-        
-        return null; // ゲームはまだ終了していない
     }
 
-    /**
-     * 指定された位置のライオンを、指定されたプレイヤーが次の手で捕獲できるかどうかを判定するヘルパーメソッド
-     * このメソッドは、盤上の駒による直接的な捕獲の可能性のみをチェックします。
-     * 手駒を打つことによる間接的な脅威（王手）は考慮しません。
-     * @param opponentType 攻撃側のプレイヤータイプ
-     * @param lionRow 捕獲対象のライオンの行座標
-     * @param lionCol 捕獲対象のライオンの列座標
-     * @return 相手が次の手でライオンを捕獲できる場合 true、できない場合 false
-     */
-    private boolean canOpponentCaptureLion(PlayerType opponentType, int lionRow, int lionCol) {
-        // 盤上の相手の駒を全てチェック
-        for (int r = 0; r < 4; r++) {
-            for (int c = 0; c < 3; c++) {
+    // 王手チェック
+    public boolean isKingInCheck(PlayerType playerType) {
+        int kingRow = -1;
+        int kingCol = -1;
+
+        // 自分のライオンの位置を見つける
+        for (int r = 0; r < Board.ROWS; r++) {
+            for (int c = 0; c < Board.COLS; c++) {
                 Piece piece = board.getPiece(r, c);
-                if (piece != null && piece.getOwner() == opponentType) {
+                if (piece instanceof Lion && piece.getOwner() == playerType) {
+                    kingRow = r;
+                    kingCol = c;
+                    break;
+                }
+            }
+            if (kingRow != -1) break;
+        }
+
+        if (kingRow == -1) {
+            // ライオンが盤面にない（既に取られている）場合は王手ではない
+            // これはゲーム終了の条件で処理されるべき
+            return false;
+        }
+
+        // 相手の駒が自分のライオンを攻撃しているかチェック
+        PlayerType opponentPlayerType = (playerType == PlayerType.PLAYER1) ? PlayerType.PLAYER2 : PlayerType.PLAYER1;
+        for (int r = 0; r < Board.ROWS; r++) {
+            for (int c = 0; c < Board.COLS; c++) {
+                Piece piece = board.getPiece(r, c);
+                if (piece != null && piece.getOwner() == opponentPlayerType) {
                     List<int[]> possibleMoves = piece.getPossibleMoves(r, c, board);
                     for (int[] move : possibleMoves) {
-                        // もし駒の移動先にライオンの座標が含まれていれば、そのライオンは取られる可能性がある
-                        if (move[0] == lionRow && move[1] == lionCol) {
-                            return true; // 捕獲可能
+                        if (move[0] == kingRow && move[1] == kingCol) {
+                            return true; // 相手の駒がライオンを攻撃している
+                        }
+                    }
+                }
+            }
+        }
+        return false;
+    }
+
+    // 王手詰み判定（このメソッドはAIのロジックで利用される）
+    public boolean isCheckmate(PlayerType playerType) {
+        // 自分のライオンが王手であるかを確認
+        if (!isKingInCheck(playerType)) {
+            return false; // 王手でなければ詰みではない
+        }
+
+        // 王手から逃れる手があるかチェック
+        // 1. 駒を動かして王手を回避する
+        for (int r = 0; r < Board.ROWS; r++) {
+            for (int c = 0; c < Board.COLS; c++) {
+                Piece piece = board.getPiece(r, c);
+                if (piece != null && piece.getOwner() == playerType) {
+                    List<int[]> possibleMoves = piece.getPossibleMoves(r, c, board);
+                    for (int[] move : possibleMoves) {
+                        // この手を試してみて、王手にならないか確認
+                        if (isValidMoveAndNotIntoCheck(playerType, r, c, move[0], move[1])) {
+                            return false; // 王手から逃れる手が見つかった
                         }
                     }
                 }
             }
         }
 
-        // 動物将棋の手駒打ちでは直接相手の駒を取ることはできないため、
-        // 手駒による捕獲可能性のチェックはここでは不要です。
-        // （もし「手駒を打って王手をかける」というルールを導入する場合は、ここを拡張する必要があります）
+        // 2. 手駒を打って王手を回避する
+        Player currentPlayerReference = null;
+        if (playerType == PlayerType.PLAYER1) {
+            currentPlayerReference = PlayerA;
+        } else {
+            currentPlayerReference = PlayerB;
+        }
 
-        return false; // 捕獲不可能
+        for (Piece pieceToDrop : currentPlayerReference.getCapturedPieces()) {
+            for (int r = 0; r < Board.ROWS; r++) {
+                for (int c = 0; c < Board.COLS; c++) {
+                    // 空いているマスであり、かつその手が王手にならないかチェック
+                    if (board.isEmpty(r, c) && isValidDropAndNotIntoCheck(playerType, pieceToDrop, r, c)) {
+                        return false; // 王手から逃れる手が見つかった
+                    }
+                }
+            }
+        }
+
+        return true; // 王手から逃れる手がない
     }
 
-    private void switchPlayer() {
-        currentPlayer = (currentPlayer == humanPlayer) ? cpuPlayer : humanPlayer;
+    public boolean isValidMoveAndNotIntoCheck(PlayerType playerType, int fromRow, int fromCol, int toRow, int toCol) {
+        Game simulatedGame = this.clone();
+        simulatedGame.setSilentMode(true);
+        // ここではまだperformMoveが王手チェックを含まないため、先に試行し、その結果でチェック
+        // simulateGameのcurrentPlayerを正しく設定
+        simulatedGame.setCurrentPlayer((playerType == PlayerType.PLAYER1) ? simulatedGame.PlayerA : simulatedGame.PlayerB);
+        boolean moveSuccessful = simulatedGame.performMove(fromRow, fromCol, toRow, toCol);
+        
+        return moveSuccessful && !simulatedGame.isKingInCheck(playerType);
     }
 
-    // 他のクラスから盤やプレイヤー情報にアクセスするためのゲッターメソッド
+    public boolean isValidDropAndNotIntoCheck(PlayerType playerType, Piece pieceToDrop, int dropRow, int dropCol) {
+        Game simulatedGame = this.clone();
+        simulatedGame.setSilentMode(true);
+
+        // クローンされたゲームのcurrentPlayerを正しく設定
+        simulatedGame.setCurrentPlayer((playerType == PlayerType.PLAYER1) ? simulatedGame.PlayerA : simulatedGame.PlayerB);
+        
+        Piece clonedPieceToDrop = null;
+        // オリジナルのpieceToDropと同じクラスとオーナーを持つ駒をcapturedPiecesから探す
+        // simulatedGame.currentPlayer の手駒リストから探す
+        for(Piece cp : simulatedGame.currentPlayer.getCapturedPieces()){
+            if(cp.getClass() == pieceToDrop.getClass() && cp.getOwner() == pieceToDrop.getOwner()){
+                clonedPieceToDrop = cp;
+                break;
+            }
+        }
+        if(clonedPieceToDrop == null) return false; // クローンされた駒が見つからない場合はエラーだが、通常は発生しないはず
+
+        boolean dropSuccessful = simulatedGame.performDrop(clonedPieceToDrop, dropRow, dropCol);
+        
+        return dropSuccessful && !simulatedGame.isKingInCheck(playerType);
+    }
+
+
+    // 王手、詰み、トライの判定と勝者決定
+    public PlayerType isGameOver() {
+        // 王手詰み判定
+        if (isCheckmate(PlayerType.PLAYER1)) {
+            printIfNotSilent("PlayerAが詰みました。");
+            return PlayerType.PLAYER2; // Player1が詰んだのでPlayer2の勝ち
+        }
+        if (isCheckmate(PlayerType.PLAYER2)) {
+            printIfNotSilent("PlayerBが詰みました。");
+            return PlayerType.PLAYER1; // Player2が詰んだのでPlayer1の勝ち
+        }
+
+        // トライ判定（ライオンが敵陣の一番奥の行に到達）
+        // Player1のライオンがPlayer2の陣地（row=3）に到達
+        for (int col = 0; col < Board.COLS; col++) {
+            Piece piece = board.getPiece(3, col); // row=3 はPlayer2の初期位置側
+            if (piece instanceof Lion && piece.getOwner() == PlayerType.PLAYER1) {
+                // そのライオンが王手でないかチェック
+                if (!isKingInCheck(PlayerType.PLAYER1)) {
+                     // トライルール: トライした直後に王手でなければ勝ち
+                    printIfNotSilent("PlayerAのライオンが敵陣に到達しました！");
+                    return PlayerType.PLAYER1;
+                }
+            }
+        }
+        // Player2のライオンがPlayer1の陣地（row=0）に到達
+        for (int col = 0; col < Board.COLS; col++) {
+            Piece piece = board.getPiece(0, col); // row=0 はPlayer1の初期位置側
+            if (piece instanceof Lion && piece.getOwner() == PlayerType.PLAYER2) {
+                // そのライオンが王手でないかチェック
+                if (!isKingInCheck(PlayerType.PLAYER2)) {
+                    // トライルール: トライした直後に王手でなければ勝ち
+                    printIfNotSilent("PlayerBのライオンが敵陣に到達しました！");
+                    return PlayerType.PLAYER2;
+                }
+            }
+        }
+
+        // どちらかのライオンが取られた場合
+        boolean player1LionExists = false;
+        boolean player2LionExists = false;
+        for (int r = 0; r < Board.ROWS; r++) {
+            for (int c = 0; c < Board.COLS; c++) {
+                Piece piece = board.getPiece(r, c);
+                if (piece instanceof Lion) {
+                    if (piece.getOwner() == PlayerType.PLAYER1) {
+                        player1LionExists = true;
+                    } else if (piece.getOwner() == PlayerType.PLAYER2) {
+                        player2LionExists = true;
+                    }
+                }
+            }
+        }
+
+        if (!player1LionExists) {
+            printIfNotSilent("PlayerAのライオンが捕獲されました。");
+            return PlayerType.PLAYER2; // Player1のライオンがいないのでPlayer2の勝ち
+        }
+        if (!player2LionExists) {
+            printIfNotSilent("PlayerBのライオンが捕獲されました。");
+            return PlayerType.PLAYER1; // Player2のライオンがいないのでPlayer1の勝ち
+        }
+        
+        return null; // ゲームがまだ終わっていない
+    }
+
     public Board getBoard() {
         return board;
     }
-    
-    public Player getHumanPlayer() {
-        return humanPlayer;
+
+    // サイレントモード設定メソッド
+    public void setSilentMode(boolean silentMode) {
+        this.silentMode = silentMode;
     }
 
-    public Player getCpuPlayer() {
-        return cpuPlayer;
+    // サイレントモード時のメッセージ表示
+    private void printIfNotSilent(String message) {
+        if (!silentMode) {
+            System.out.println(message);
+        }
+    }
+
+    // クローン実装
+    @Override
+    public Game clone() {
+        try {
+            Game clonedGame = (Game) super.clone();
+            clonedGame.board = this.board.clone(); // Boardのディープコピー
+            clonedGame.scanner = new Scanner(System.in); // 新しいScannerを作成
+            
+            // Playerインスタンスもディープコピー
+            // PlayerAとPlayerBの型に基づいてクローンを作成
+            // PlayerAはRandomPlayerとして宣言されているため、RandomPlayerとしてクローン
+            clonedGame.PlayerA = (RandomPlayer) this.PlayerA.clone();
+
+            // ------------------------------------------------------------------
+
+            // AIごとの変更点その3
+            // PlayerBはMinMaxとして宣言されているため、MinMaxとしてクローン
+            // 例: 西岡の作成したAI(MinMax.java)の場合、以下のように記述する.
+            // clonedGame.PlayerB = (変数の型) this.PlayerB.clone();
+            clonedGame.PlayerB = (MinMax) this.PlayerB.clone(); // 西岡
+
+            // ------------------------------------------------------------------
+            
+            // currentPlayerの参照をクローンされたPlayerインスタンスに更新
+            if (this.currentPlayer == this.PlayerA) {
+                clonedGame.currentPlayer = clonedGame.PlayerA;
+            } else {
+                clonedGame.currentPlayer = clonedGame.PlayerB;
+            }
+            
+            // トライルール関連のフィールドもコピー（プリミティブ型なのでそのままコピーでOK）
+            clonedGame.trialPlayer = this.trialPlayer;
+            clonedGame.trialRow = this.trialRow;
+            clonedGame.trialCol = this.trialCol;
+
+
+            return clonedGame;
+        } catch (CloneNotSupportedException e) {
+            throw new AssertionError(); // Should not happen
+        }
+    }
+
+    // クローンされたゲームのcurrentPlayerを設定するヘルパーメソッド
+    // isValidMoveAndNotIntoCheck や isValidDropAndNotIntoCheck で必要
+    public void setCurrentPlayer(Player player) {
+        this.currentPlayer = player;
+    }
+
+    // 現在のプレイヤーを取得するメソッドを公開
+    public Player getCurrentPlayer() {
+        return currentPlayer;
+    }
+
+    // PlayerAを取得するメソッド
+    public Player getPlayerA() {
+        return PlayerA;
+    }
+
+    // PlayerBを取得するメソッド
+    public Player getPlayerB() {
+        return PlayerB;
     }
 }

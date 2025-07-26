@@ -39,4 +39,10 @@ public class Zou extends Piece {
         // プレイヤー1 (先手) は日本語、プレイヤー2 (後手) はカタカナ
         return (owner == PlayerType.PLAYER1) ? "象" : "ゾ";
     }
+
+    //clone()実装
+    @Override
+    public Zou clone() {
+        return (Zou) super.clone(); // フィールドが不変ならこれで十分
+    }
 }

@@ -1,28 +1,18 @@
 import java.util.ArrayList;
 import java.util.List;
 
-public class Player {
-    private String name;
-    private PlayerType playerType; // このプレイヤーがどちらの駒を扱うか
-    private List<Piece> capturedPieces; // 手駒
+public abstract class Player implements Cloneable { // インターフェースから抽象クラスに変更
+    protected String name;
+    protected PlayerType playerType;
+    protected List<Piece> capturedPieces;
 
     public Player(String name) {
         this.name = name;
-        this.capturedPieces = new ArrayList<>(); // 手駒を格納するための空のリストを初期化
-        // GameクラスでPlayerTypeを正しく設定することを推奨
-        // 現状の簡易的な判定方法:
-        // この処理はすでにGame.javaで実装済み
-        // if (name.equals("player")) {
-        //     this.playerType = PlayerType.PLAYER1;
-        // } else if (name.equals("enemy")) {
-        //     this.playerType = PlayerType.PLAYER2;
-        // } else {
-        //     System.out.println("kokokko");
-        // }
+        this.capturedPieces = new ArrayList<>();
     }
 
     public String getName() {
-        return name; //nameを外部から取得
+        return name;
     }
 
     public List<Piece> getCapturedPieces() {
@@ -44,8 +34,25 @@ public class Player {
         return playerType;
     }
 
-    // PlayerTypeを設定するsetter（Gameクラスから設定するために必要）
     public void setPlayerType(PlayerType playerType) {
         this.playerType = playerType;
+    }
+
+    // AIが手を決定するための抽象メソッド (MinMaxが実装)
+    public abstract int[] chooseMove(Game game); 
+
+    @Override
+    public Player clone() { // cloneメソッドをここで実装
+        try {
+            Player cloned = (Player) super.clone();
+            // 手駒リストのディープコピー
+            cloned.capturedPieces = new ArrayList<>();
+            for (Piece p : this.capturedPieces) {
+                cloned.capturedPieces.add(p.clone()); // Piece も clone できるように
+            }
+            return cloned;
+        } catch (CloneNotSupportedException e) {
+            throw new AssertionError(e);
+        }
     }
 }

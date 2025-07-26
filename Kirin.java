@@ -39,4 +39,10 @@ public class Kirin extends Piece {
         // プレイヤー1 (先手) は日本語、プレイヤー2 (後手) はカタカナ
         return (owner == PlayerType.PLAYER1) ? "麒" : "キ";
     }
+
+    //clone()実装
+    @Override
+    public Kirin clone() {
+        return (Kirin) super.clone(); // フィールドが不変ならこれで十分
+    }
 }

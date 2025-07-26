@@ -1,6 +1,6 @@
 import java.util.List; // Listを使うため
 
-public abstract class Piece {
+public abstract class Piece implements Cloneable {
     protected PlayerType owner; // どちらのプレイヤーの駒か
     protected boolean isPromoted; // 成り駒かどうか
 
@@ -42,4 +42,14 @@ public abstract class Piece {
 
     // 盤面表示用のシンボル
     public abstract String getSymbol();
+    // Pieceクラスまたはそのサブクラスに追加
+    //clone()実装
+    @Override
+    public Piece clone() {
+	try {
+	    return (Piece) super.clone();
+	} catch (CloneNotSupportedException e) {
+	    throw new AssertionError(); // 発生しない
+	}
+    }
 }

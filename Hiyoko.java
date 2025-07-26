@@ -45,10 +45,16 @@ public class Hiyoko extends Piece {
     @Override
     public String getSymbol() {
         // 先手は日本語、後手はカタカナ、成りは共通
-        if (owner == PlayerType.PLAYER1) {
-            return isPromoted() ? "鶏" : "ひ"; // にわとり
-        } else {
-            return isPromoted() ? "鶏" : "ヒ"; // ニワトリ
+        if (isPromoted()) {
+            return (owner == PlayerType.PLAYER1) ? "鶏" : "ニ"; // にわとり
         }
+        return (owner == PlayerType.PLAYER1) ? "ひ" : "ヒ"; // ひよこ
+    }
+
+    //clone()実装
+    @Override
+    // public Lion clone() { // 変更前
+    public Hiyoko clone() { // 変更後: Hiyoko自身を返すように
+        return (Hiyoko) super.clone();
     }
 }
