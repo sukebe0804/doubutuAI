@@ -18,7 +18,7 @@ import java.util.Random;
 
 public class AI_gj extends Player {
 
-    private static final int MAX_DEPTH = 6; // 探索の深さ
+    private static final int MAX_DEPTH = 7; // 探索の深さ
     private static final int WIN_SCORE = 100000; // 勝利時の評価点
     private static final int LOSE_SCORE = -100000; // 敗北時の評価点
 
