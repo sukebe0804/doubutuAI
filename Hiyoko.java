@@ -1,38 +1,48 @@
+// Hiyoko.java
+
 import java.util.ArrayList;
 import java.util.List;
 
 public class Hiyoko extends Piece {
+
+    private boolean isPromoted = false; // 成っているかどうかの状態を保持
+
     public Hiyoko(PlayerType owner) {
-        super(owner);
+        super(owner); // PieceクラスのコンストラクタはPlayerTypeのみを受け取る
+        this.isPromoted = false; // 初期状態では成っていない
     }
 
     @Override
     public List<int[]> getPossibleMoves(int currentRow, int currentCol, Board board) {
         List<int[]> moves = new ArrayList<>();
-        // 先手は行が増加方向、後手は行が減少方向
-        int direction = (owner == PlayerType.PLAYER1) ? 1 : -1;
 
-        if (isPromoted()) {
-            // にわとりの動き(今回は, 将棋の「金」と同じ動き方に設定)
-            int[][] deltas = {
-                {-1, 0}, {1, 0}, {0, -1}, {0, 1}, // 上下左右
-                {-1, -1}, {-1, 1} // 斜め
+        if (isPromoted) { // にわとりの動き
+            // にわとりはライオンと同じ動き（全方向1マス）
+            int[][] directions = {
+                {-1, -1}, {-1, 0}, {-1, 1}, // 上方向
+                { 0, -1},          { 0, 1}, // 左右
+                { 1, -1}, { 1, 0}, { 1, 1}  // 下方向
             };
-            for (int[] delta : deltas) {
-                int newRow = currentRow + delta[0];
-                int newCol = currentCol + delta[1];
-                if (board.isValidCoordinate(newRow, newCol)) {
+
+            for (int[] d : directions) {
+                int newRow = currentRow + d[0];
+                int newCol = currentCol + d[1];
+
+                if (isValidMove(newRow, newCol, board)) {
                     Piece targetPiece = board.getPiece(newRow, newCol);
                     if (targetPiece == null || targetPiece.getOwner() != this.getOwner()) {
                         moves.add(new int[]{newRow, newCol});
                     }
                 }
             }
-        } else {
-            // ひよこの動き (前方に1マス)
+        } else { // ひよこの動き
+            // ひよこは前方に1マス進める
+            int direction = (this.getOwner() == PlayerType.PLAYER1) ? -1 : 1; // PLAYER1は上、PLAYER2は下
+
             int newRow = currentRow + direction;
             int newCol = currentCol;
-            if (board.isValidCoordinate(newRow, newCol)) {
+
+            if (isValidMove(newRow, newCol, board)) {
                 Piece targetPiece = board.getPiece(newRow, newCol);
                 if (targetPiece == null || targetPiece.getOwner() != this.getOwner()) {
                     moves.add(new int[]{newRow, newCol});
@@ -42,19 +52,37 @@ public class Hiyoko extends Piece {
         return moves;
     }
 
-    @Override
-    public String getSymbol() {
-        // 先手は日本語、後手はカタカナ、成りは共通
-        if (isPromoted()) {
-            return (owner == PlayerType.PLAYER1) ? "鶏" : "ニ"; // にわとり
-        }
-        return (owner == PlayerType.PLAYER1) ? "ひ" : "ヒ"; // ひよこ
+    // 駒が盤面の有効な範囲内にあるかチェックするヘルパーメソッド
+    private boolean isValidMove(int r, int c, Board board) {
+        return r >= 0 && r < Board.ROWS && c >= 0 && c < Board.COLS;
     }
 
-    //clone()実装
+    // Pieceクラスの抽象メソッドを実装
     @Override
-    // public Lion clone() { // 変更前
-    public Hiyoko clone() { // 変更後: Hiyoko自身を返すように
-        return (Hiyoko) super.clone();
+    public String getSymbol() {
+        return isPromoted ? "にわとり" : "ひよこ";
+    }
+
+    // 成るメソッド
+    @Override
+    public void promote() {
+        this.isPromoted = true;
+    }
+
+    // 成った駒を元に戻すメソッド (Pieceクラスにdemote()がないため@Overrideは付けない)
+    public void demote() {
+        this.isPromoted = false;
+    }
+
+    // 成っているかどうかの状態を取得するメソッド
+    public boolean isPromoted() {
+        return isPromoted;
+    }
+
+    @Override
+    public Piece clone() {
+        Hiyoko clonedHiyoko = new Hiyoko(this.getOwner());
+        clonedHiyoko.isPromoted = this.isPromoted; // 成り状態をクローンする
+        return clonedHiyoko;
     }
 }
