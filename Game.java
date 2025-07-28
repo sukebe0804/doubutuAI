@@ -23,7 +23,8 @@ public class Game implements Cloneable {
     // PlayerBの指定
     // 例: 西岡の作成したAI(MinMax.java)の場合、以下のように記述する.
     // private 変数のデータ型 変数(ここはPlayerB固定)
-    private MinMax PlayerB; // 西岡
+    
+    private QLearn PlayerB;
 
     // -----------------------------------------------------------------------
 
@@ -44,7 +45,7 @@ public class Game implements Cloneable {
         // AIごとの変更点その2
         // 例: 西岡の作成したAI(MinMax.java)の場合、以下のように記述する.
         // this.PlayerB = new 変数の型("作成したAIの名前")
-        this.PlayerB = new MinMax("MinMax"); // 西岡
+        this.PlayerB = new QLearn("QLearn"); // 西岡
 
         // -----------------------------------------------------------------------
 
@@ -57,6 +58,29 @@ public class Game implements Cloneable {
         currentPlayer = this.PlayerB; // PlayerA, or Bどちらを先手にするかはここで指定する.
         initializeGame();
     }
+
+    //----------------------------ここから追加（加藤）------------------------
+    public Game(QLearn trialedQLearn) {
+        board = new Board();
+        scanner = new Scanner(System.in);
+        this.PlayerA = new RandomPlayer("RandomPlayer");
+        // this.PlayerA = new HumanPlayer("Human");
+
+        // -----------------------------------------------------------------------
+        this.PlayerB = trialedQLearn; // 加藤
+
+        // -----------------------------------------------------------------------
+
+        System.out.println("PlayerA: " + PlayerA);
+        System.out.println("PlayerB: " + PlayerB);
+
+        PlayerA.setPlayerType(PlayerType.PLAYER1);
+        PlayerB.setPlayerType(PlayerType.PLAYER2);
+
+        currentPlayer = this.PlayerB; // PlayerA, or Bどちらを先手にするかはここで指定する.
+        initializeGame();
+    }
+    //---------------------------ここまで-------------------------------
 
     private void initializeGame() {
         // PLAYER1の駒
@@ -586,7 +610,7 @@ public class Game implements Cloneable {
             // PlayerBはMinMaxとして宣言されているため、MinMaxとしてクローン
             // 例: 西岡の作成したAI(MinMax.java)の場合、以下のように記述する.
             // clonedGame.PlayerB = (変数の型) this.PlayerB.clone();
-            clonedGame.PlayerB = (MinMax) this.PlayerB.clone(); // 西岡
+            clonedGame.PlayerB = (QLearn) this.PlayerB.clone(); // 西岡
 
             // ------------------------------------------------------------------
             
@@ -675,4 +699,50 @@ public class Game implements Cloneable {
         System.out.println("--- シミュレーション終了 ---");
     }
     //  ---------------------ここまで新メソッドを追加(西岡)------------------------
+
+    //  ---------------------ここから新メソッドを追加(加藤)------------------------
+    public static void QLrunSimulations(int numGames, QLearn trialedQLearn) {
+	int player1Wins = 0;
+	int player2Wins = 0;
+	int draws = 0; // 引き分けをカウント
+
+	System.out.println("--- シミュレーション開始 (全 " + numGames + " ゲーム) ---");
+
+	for (int i = 0; i < numGames; i++) {
+	    System.out.println("ゲーム " + (i + 1) + " / " + numGames);
+	    Game game = new Game(trialedQLearn);
+	    game.setSilentMode(true); // シミュレーション中はサイレントモードを有効にする
+            
+	    PlayerType winner = null;
+	    // 盤面の状態が同じ手数が連続した場合、引き分けと判定するためのカウンタ
+	    // ここでは簡易的に、ゲームが進行しない場合の無限ループを避けるための一時的な対策として、
+	    // 一定のターン数を超えたら引き分けと見なす
+	    int turnCount = 0;
+	    final int MAX_TURNS = 500; // 最大ターン数。これを超えたら引き分けと見なす
+
+	    while (winner == null && turnCount < MAX_TURNS) {
+		game.handleCpuTurn();
+		winner = game.isGameOver();
+		if (winner == null) { // 勝者がまだ決まっていない場合のみプレイヤーを切り替える
+		    game.switchPlayer();
+		}
+		turnCount++;
+	    }
+
+	    if (winner == PlayerType.PLAYER1) {
+		player1Wins++;
+	    } else if (winner == PlayerType.PLAYER2) {
+		player2Wins++;
+	    } else {
+		draws++; // 最大ターン数を超過した場合は引き分け
+	    }
+	}
+
+	System.out.println("--- シミュレーション結果 ---");
+	System.out.println("PlayerA (RandomPlayer) の勝利数: " + player1Wins);
+	System.out.println("PlayerB (QLearn) の勝利数: " + player2Wins);
+	System.out.println("引き分け数: " + draws);
+	System.out.println("--- シミュレーション終了 ---");
+    }
+    //  ---------------------ここまで新メソッドを追加(加藤)------------------------
 }
