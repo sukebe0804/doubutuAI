@@ -14,8 +14,8 @@ public class Game implements Cloneable {
     // private HumanPlayer PlayerA;
 
     // private MinMax PlayerA; // 西岡
-    private QLearn PlayerA; // 加藤
-    // private AlphaBeta PlayerA; // 宮田
+    // private QLearn PlayerA; // 加藤
+    private AlphaBeta PlayerA; // 宮田
 
     // -----------------------------------------------------------------------
 
@@ -48,8 +48,8 @@ public class Game implements Cloneable {
         // this.PlayerA = new RandomPlayer("RandomPlayer");
         // this.PlayerA = new HumanPlayer("Human");
         // this.PlayerA = new MinMax("MinMax"); // 西岡
-        this.PlayerA = new QLearn("QLearn"); // 加藤
-        // this.PlayerA = new AlphaBeta("AlphaBeta"); // 宮田
+        // this.PlayerA = new QLearn("QLearn"); // 加藤
+        this.PlayerA = new AlphaBeta("AlphaBeta"); // 宮田
 
         // -----------------------------------------------------------------------
 
@@ -74,26 +74,26 @@ public class Game implements Cloneable {
     }
 
     //----------------------------ここから追加（加藤）------------------------
-    public Game(QLearn trialedQLearn) {
-        board = new Board();
-        scanner = new Scanner(System.in);
-        this.PlayerB = new MinMax("MinMax");
-        // this.PlayerA = new HumanPlayer("Human");
+    // public Game(QLearn trialedQLearn) {
+    //     board = new Board();
+    //     scanner = new Scanner(System.in);
+    //     this.PlayerB = new MinMax("MinMax");
+    //     // this.PlayerA = new HumanPlayer("Human");
 
-        // -----------------------------------------------------------------------
-        this.PlayerA = trialedQLearn; // 加藤
+    //     // -----------------------------------------------------------------------
+    //     this.PlayerA = trialedQLearn; // 加藤
 
-        // -----------------------------------------------------------------------
+    //     // -----------------------------------------------------------------------
 
-        System.out.println("PlayerA: " + PlayerA);
-        System.out.println("PlayerB: " + PlayerB);
+    //     System.out.println("PlayerA: " + PlayerA);
+    //     System.out.println("PlayerB: " + PlayerB);
 
-        PlayerA.setPlayerType(PlayerType.PLAYER1);
-        PlayerB.setPlayerType(PlayerType.PLAYER2);
+    //     PlayerA.setPlayerType(PlayerType.PLAYER1);
+    //     PlayerB.setPlayerType(PlayerType.PLAYER2);
 
-        currentPlayer = this.PlayerA; // PlayerA, or Bどちらを先手にするかはここで指定する.
-        initializeGame();
-    }
+    //     currentPlayer = this.PlayerA; // PlayerA, or Bどちらを先手にするかはここで指定する.
+    //     initializeGame();
+    // }
     //---------------------------ここまで-------------------------------
 
     private void initializeGame() {
@@ -632,8 +632,8 @@ public class Game implements Cloneable {
             // clonedGame.PlayerA = (RandomPlayer) this.PlayerA.clone();
 
             // lonedGame.PlayerA = (MinMax) this.PlayerA.clone(); // 西岡
-            // clonedGame.PlayerA = (AlphaBeta) this.PlayerA.clone(); // 宮田
-            clonedGame.PlayerA = (QLearn) this.PlayerA.clone(); // 加藤
+            clonedGame.PlayerA = (AlphaBeta) this.PlayerA.clone(); // 宮田
+            // clonedGame.PlayerA = (QLearn) this.PlayerA.clone(); // 加藤
 
             // ------------------------------------------------------------------
 
@@ -735,48 +735,48 @@ public class Game implements Cloneable {
     //  ---------------------ここまで新メソッドを追加(西岡)------------------------
 
     //  ---------------------ここから新メソッドを追加(加藤)------------------------
-    public static void QLrunSimulations(int numGames, QLearn trialedQLearn) {
-	int player1Wins = 0;
-	int player2Wins = 0;
-	int draws = 0; // 引き分けをカウント
+    // public static void QLrunSimulations(int numGames, QLearn trialedQLearn) {
+	// int player1Wins = 0;
+	// int player2Wins = 0;
+	// int draws = 0; // 引き分けをカウント
 
-	System.out.println("--- シミュレーション開始 (全 " + numGames + " ゲーム) ---");
+	// System.out.println("--- シミュレーション開始 (全 " + numGames + " ゲーム) ---");
 
-	for (int i = 0; i < numGames; i++) {
-	    System.out.println("ゲーム " + (i + 1) + " / " + numGames);
-	    Game game = new Game(trialedQLearn);
-	    game.setSilentMode(true); // シミュレーション中はサイレントモードを有効にする
+	// for (int i = 0; i < numGames; i++) {
+	//     System.out.println("ゲーム " + (i + 1) + " / " + numGames);
+	//     Game game = new Game(trialedQLearn);
+	//     game.setSilentMode(true); // シミュレーション中はサイレントモードを有効にする
             
-	    PlayerType winner = null;
-	    // 盤面の状態が同じ手数が連続した場合、引き分けと判定するためのカウンタ
-	    // ここでは簡易的に、ゲームが進行しない場合の無限ループを避けるための一時的な対策として、
-	    // 一定のターン数を超えたら引き分けと見なす
-	    int turnCount = 0;
-	    final int MAX_TURNS = 500; // 最大ターン数。これを超えたら引き分けと見なす
+	//     PlayerType winner = null;
+	//     // 盤面の状態が同じ手数が連続した場合、引き分けと判定するためのカウンタ
+	//     // ここでは簡易的に、ゲームが進行しない場合の無限ループを避けるための一時的な対策として、
+	//     // 一定のターン数を超えたら引き分けと見なす
+	//     int turnCount = 0;
+	//     final int MAX_TURNS = 500; // 最大ターン数。これを超えたら引き分けと見なす
 
-	    while (winner == null && turnCount < MAX_TURNS) {
-		game.handleCpuTurn();
-		winner = game.isGameOver();
-		if (winner == null) { // 勝者がまだ決まっていない場合のみプレイヤーを切り替える
-		    game.switchPlayer();
-		}
-		turnCount++;
-	    }
+	//     while (winner == null && turnCount < MAX_TURNS) {
+	// 	game.handleCpuTurn();
+	// 	winner = game.isGameOver();
+	// 	if (winner == null) { // 勝者がまだ決まっていない場合のみプレイヤーを切り替える
+	// 	    game.switchPlayer();
+	// 	}
+	// 	turnCount++;
+	//     }
 
-	    if (winner == PlayerType.PLAYER1) {
-		player1Wins++;
-	    } else if (winner == PlayerType.PLAYER2) {
-		player2Wins++;
-	    } else {
-		draws++; // 最大ターン数を超過した場合は引き分け
-	    }
-	}
+	//     if (winner == PlayerType.PLAYER1) {
+	// 	player1Wins++;
+	//     } else if (winner == PlayerType.PLAYER2) {
+	// 	player2Wins++;
+	//     } else {
+	// 	draws++; // 最大ターン数を超過した場合は引き分け
+	//     }
+	// }
 
-	System.out.println("--- シミュレーション結果 ---");
-	System.out.println("PlayerA (RandomPlayer) の勝利数: " + player1Wins);
-	System.out.println("PlayerB (QLearn) の勝利数: " + player2Wins);
-	System.out.println("引き分け数: " + draws);
-	System.out.println("--- シミュレーション終了 ---");
-    }
+	// System.out.println("--- シミュレーション結果 ---");
+	// System.out.println("PlayerA (RandomPlayer) の勝利数: " + player1Wins);
+	// System.out.println("PlayerB (QLearn) の勝利数: " + player2Wins);
+	// System.out.println("引き分け数: " + draws);
+	// System.out.println("--- シミュレーション終了 ---");
+    // }
     //  ---------------------ここまで新メソッドを追加(加藤)------------------------
 }
