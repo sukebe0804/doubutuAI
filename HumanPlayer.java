@@ -1,7 +1,5 @@
 import java.util.List; // 必要に応じてインポート
 
-
-
 public class HumanPlayer extends Player {
 
     public HumanPlayer(String name) {

@@ -8,10 +8,10 @@ import java.util.Random;
 
 public class MinMax extends Player {
     // 探索の深さ
-    private static final int MAX_DEPTH = 9; // 探索深度を調整（計算資源と相談）
+    private static final int MAX_DEPTH = 10; // 探索深度を調整（計算資源と相談）
 
     // 駒の基本価値
-    private static final int LION_VALUE = 5000; // ライオンの価値を非常に高く設定（詰み/トライはこれよりはるかに高い）
+    private static final int LION_VALUE = 2500; // ライオンの価値を非常に高く設定（詰み/トライはこれよりはるかに高い）
     private static final int KIRIN_VALUE = 300;
     private static final int ZOU_VALUE = 300;
     private static final int HIYOKO_VALUE = 100;
@@ -26,7 +26,7 @@ public class MinMax extends Player {
     private static final int ATTACKED_OPPONENT_PIECE_BONUS = 50; // 相手の駒を攻撃している場合のボーナスを強化
     private static final int DEFENDED_OWN_PIECE_BONUS = 30; // 自分の駒が守られている場合のボーナス (ライオン以外) を強化
     private static final int PROMOTION_THREAT_BONUS = 150; // ひよこが敵陣最奥にいる場合のボーナス
-    private static final int TRIAL_WIN_SCORE = LION_VALUE; // トライによる勝利点
+    private static final int TRIAL_WIN_SCORE = 10000; // トライによる勝利点
 
     // 駒の配置点テーブル (Piece-Square Tables) - 調整済み
     // PLAYER1 (CPU) 視点での価値。PLAYER2の駒の場合は、行を反転して使用する。
@@ -318,11 +318,6 @@ public class MinMax extends Player {
                 return false; // 既に駒があるマスには打てない
             }
 
-            // その駒を打つと王手になるかチェック
-            if (!isValidDropAndNotIntoCheck(playerType, pieceToDrop, toRow, toCol)) {
-                return false;
-            }
-
             // makeDrop 自体は副作用を持つべきなので、isValidDropAndNotIntoCheck でチェックを通った後、
             // 実際の駒の配置を行う。
             board.placePiece(pieceToDrop, toRow, toCol);
@@ -598,16 +593,16 @@ public class MinMax extends Player {
             // SimulationState の playerA と playerB を使用
             for (Piece p : playerA.getCapturedPieces()) {
                 if (PlayerType.PLAYER1 == evaluatingPlayerType) {
-                    score += getPieceValue(p) / 2; // 自手駒はボーナス
+                    score += getPieceValue(p) * 3; // 自手駒はボーナス
                 } else {
-                    score -= getPieceValue(p) / 2; // 相手手駒はペナルティ
+                    score -= getPieceValue(p) * 3; // 相手手駒はペナルティ
                 }
             }
             for (Piece p : playerB.getCapturedPieces()) {
                 if (PlayerType.PLAYER2 == evaluatingPlayerType) {
-                    score += getPieceValue(p) / 2; // 自手駒はボーナス
+                    score += getPieceValue(p) * 3; // 自手駒はボーナス
                 } else {
-                    score -= getPieceValue(p) / 2; // 相手手駒はペナルティ
+                    score -= getPieceValue(p) * 3; // 相手手駒はペナルティ
                 }
             }
 
@@ -789,7 +784,7 @@ public class MinMax extends Player {
                 SimulationState cloned = (SimulationState) super.clone();
                 cloned.board = this.board.clone(); // Boardもディープコピー
                 cloned.playerA = this.playerA.clone(); // Playerもディープコピー
-                cloned.playerB = this.playerB.clone(); // Playerもディープコピー
+                cloned.playerB = this.playerB.clone(); // Playerもディープコピーdd
                 // currentPlayerType はプリミティブなのでそのままコピーされる
                 return cloned;
             } catch (CloneNotSupportedException e) {

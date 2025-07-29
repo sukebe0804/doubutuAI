@@ -12,7 +12,10 @@ public class Game implements Cloneable {
     // PlayerAの指定
     // private RandomPlayer PlayerA; // ランダムプレイヤー
     // private HumanPlayer PlayerA;
-    private MinMax PlayerA; // 西岡
+
+    // private MinMax PlayerA; // 西岡
+    private QLearn PlayerA; // 加藤
+    // private AlphaBeta PlayerA; // 宮田
 
     // -----------------------------------------------------------------------
 
@@ -25,13 +28,10 @@ public class Game implements Cloneable {
     // PlayerBの指定
     // 例: 西岡の作成したAI(MinMax.java)の場合、以下のように記述する.
     // private 変数のデータ型 変数(ここはPlayerB固定)
-<<<<<<< HEAD
-    
-    private QLearn PlayerB;
-=======
-    // private MinMax PlayerB; // 西岡
-    private AlphaBeta PlayerB; //宮田
->>>>>>> 3305fa1 (new)
+
+    // private QLearn PlayerB; // 加藤
+    private MinMax PlayerB; // 西岡
+    // private AlphaBeta PlayerB; //宮田
 
     // -----------------------------------------------------------------------
 
@@ -44,21 +44,22 @@ public class Game implements Cloneable {
     public Game() {
         board = new Board();
         scanner = new Scanner(System.in);
+
         // this.PlayerA = new RandomPlayer("RandomPlayer");
         // this.PlayerA = new HumanPlayer("Human");
-        this.PlayerA = new MinMax("MinMax"); // 西岡
+        // this.PlayerA = new MinMax("MinMax"); // 西岡
+        this.PlayerA = new QLearn("QLearn"); // 加藤
+        // this.PlayerA = new AlphaBeta("AlphaBeta"); // 宮田
 
         // -----------------------------------------------------------------------
 
         // AIごとの変更点その2
         // 例: 西岡の作成したAI(MinMax.java)の場合、以下のように記述する.
         // this.PlayerB = new 変数の型("作成したAIの名前")
-<<<<<<< HEAD
-        this.PlayerB = new QLearn("QLearn"); // 西岡
-=======
-        // this.PlayerB = new MinMax("MinMax"); // 西岡
-        this.PlayerB = new AlphaBeta("AlphaBeta"); // 宮田
->>>>>>> 3305fa1 (new)
+        // this.PlayerB = new QLearn("QLearn"); // 加藤
+
+        this.PlayerB = new MinMax("MinMax"); // 西岡
+        // this.PlayerB = new AlphaBeta("AlphaBeta"); // 宮田
 
         // -----------------------------------------------------------------------
 
@@ -76,11 +77,11 @@ public class Game implements Cloneable {
     public Game(QLearn trialedQLearn) {
         board = new Board();
         scanner = new Scanner(System.in);
-        this.PlayerA = new RandomPlayer("RandomPlayer");
+        this.PlayerB = new MinMax("MinMax");
         // this.PlayerA = new HumanPlayer("Human");
 
         // -----------------------------------------------------------------------
-        this.PlayerB = trialedQLearn; // 加藤
+        this.PlayerA = trialedQLearn; // 加藤
 
         // -----------------------------------------------------------------------
 
@@ -90,7 +91,7 @@ public class Game implements Cloneable {
         PlayerA.setPlayerType(PlayerType.PLAYER1);
         PlayerB.setPlayerType(PlayerType.PLAYER2);
 
-        currentPlayer = this.PlayerB; // PlayerA, or Bどちらを先手にするかはここで指定する.
+        currentPlayer = this.PlayerA; // PlayerA, or Bどちらを先手にするかはここで指定する.
         initializeGame();
     }
     //---------------------------ここまで-------------------------------
@@ -629,7 +630,10 @@ public class Game implements Cloneable {
             // PlayerAとPlayerBの型に基づいてクローンを作成
             // PlayerAはRandomPlayerとして宣言されているため、RandomPlayerとしてクローン
             // clonedGame.PlayerA = (RandomPlayer) this.PlayerA.clone();
-            clonedGame.PlayerA = (MinMax) this.PlayerA.clone(); // 西岡
+
+            // lonedGame.PlayerA = (MinMax) this.PlayerA.clone(); // 西岡
+            // clonedGame.PlayerA = (AlphaBeta) this.PlayerA.clone(); // 宮田
+            clonedGame.PlayerA = (QLearn) this.PlayerA.clone(); // 加藤
 
             // ------------------------------------------------------------------
 
@@ -637,12 +641,10 @@ public class Game implements Cloneable {
             // PlayerBはMinMaxとして宣言されているため、MinMaxとしてクローン
             // 例: 西岡の作成したAI(MinMax.java)の場合、以下のように記述する.
             // clonedGame.PlayerB = (変数の型) this.PlayerB.clone();
-<<<<<<< HEAD
-            clonedGame.PlayerB = (QLearn) this.PlayerB.clone(); // 西岡
-=======
-            // clonedGame.PlayerB = (MinMax) this.PlayerB.clone(); // 西岡
-            clonedGame.PlayerB = (AlphaBeta) this.PlayerB.clone(); // 宮田
->>>>>>> 3305fa1 (new)
+
+            clonedGame.PlayerB = (MinMax) this.PlayerB.clone(); // 西岡
+            // clonedGame.PlayerB = (AlphaBeta) this.PlayerB.clone(); // 宮田
+            // clonedGame.PlayerB = (QLearn) this.PlayerB.clone(); // 加藤
 
             // ------------------------------------------------------------------
             
