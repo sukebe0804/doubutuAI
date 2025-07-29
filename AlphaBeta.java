@@ -12,10 +12,16 @@ public class AlphaBeta extends Player {
     private static final int HEN_VALUE = 400;
     
     // 評価パラメータ (必要最小限に)
-    private static final int CAPTURE_BONUS = 2500;
-    private static final int SAFETY_BONUS = 200;
+    private static final int CAPTURE_BONUS = 1000;
+    private static final int SAFETY_BONUS = 100;
     private static final int MAX_DEPTH = 4;
 
+    private static final int MATERIAL_ADVANTAGE_BONUS = 100; // 駒の数的優位ボーナス
+    private static final int WINNING_POSITION_BONUS = 10000; // 勝勢ボーナス
+    private static final int LION_CAPTURE_THREAT = 5000; // ライオン捕獲の脅威
+
+    private static final int MATERIAL_THRESHOLD = 3;  // 駒数差の閾値
+    private static final int MATERIAL_ADVANTAGE_MULTIPLIER = 2;  // 数的優位時の係数
     public AlphaBeta(String name) {
         super(name);
     }
@@ -26,7 +32,7 @@ public class AlphaBeta extends Player {
 	List<int[]> legalMoves = new ArrayList<>();
 	
 	boolean inCheck = game.isKingInCheck(getPlayerType());
-	
+	game.setSilentMode(true);
 	for (int[] move : allMoves) {
 	    Game simulatedGame = game.clone();
 	    applyMove(simulatedGame, move);
@@ -41,7 +47,7 @@ public class AlphaBeta extends Player {
         int[] bestMove = null;
         int bestValue = Integer.MIN_VALUE;
         
-        game.setSilentMode(true);
+   
         for (int[] move : moves) {
             Game newGame = game.clone();
             applyMove(newGame, move);
@@ -61,31 +67,40 @@ public class AlphaBeta extends Player {
 
     // 主要な評価を1つのメソッドに統合
     private int evaluateMove(Game game, int[] move) {
-        int score = 0;
-        Board board = game.getBoard();
-        
-        // 1. 駒取り評価
-        if (isCaptureMove(game, move)) {
+	int score = 0;
+	Board board = game.getBoard();
+    
+	// 1. 駒取り評価 (強化)
+	if (isCaptureMove(game, move)) {
 	    Piece target = board.getPiece(move[2], move[3]);
-	    Piece attacker = board.getPiece(move[0], move[1]); // 自分の駒
-
 	    int targetValue = getPieceValue(target);
-	    int attackerValue = getPieceValue(attacker);
-
-	    int tradeGain = targetValue - attackerValue;
-	    score += tradeGain; // 良い交換ならプラス、悪い交換ならマイナス評価
-
+        
+	    // ライオン捕獲は最大評価
+	    if (isLion(target)) {
+		return WINNING_POSITION_BONUS * 2;
+	    }
+        
+	    score += targetValue * 3 + CAPTURE_BONUS;
+        
 	    if (!isUnderAttack(board, move[2], move[3], getPlayerType())) {
-		score += CAPTURE_BONUS; // 安全ならボーナスも加算
+		score += CAPTURE_BONUS / 2;
 	    }
 	}
-
-        
-        // 2. ライオン関連評価
-        if (move[0] != -1 && isLion(board.getPiece(move[2], move[3]))) {
-            score += evaluateLionSafety(board, move[2], move[3]);
-        }
-        return score;
+    
+	// 2. ライオン関連評価
+	if (move[0] != -1) {
+	    Piece movedPiece = board.getPiece(move[2], move[3]);
+	    if (isLion(movedPiece)) {
+		// ライオンが敵陣に到達する場合
+		int trialRow = (getPlayerType() == PlayerType.PLAYER1) ? Board.ROWS - 1 : 0;
+		if (move[2] == trialRow) {
+		    score += WINNING_POSITION_BONUS;
+		}
+		score += evaluateLionSafety(board, move[2], move[3], getPlayerType());
+	    }
+	}
+    
+	return score;
     }
 
     // ライオン安全性評価を簡潔に
@@ -139,35 +154,83 @@ public class AlphaBeta extends Player {
             return minEval;
         }
     }
+    private int evaluateLionSafety(Board board, int row, int col, PlayerType player) {
+	// 1. ライオンが安全かチェック（攻撃を受けていないか）
+	if (isUnderAttack(board, row, col, player)) {
+	    return -50000; // 危険な位置には最大ペナルティ
+	}
+    
+	// 2. 敵ライオンとの距離評価
+	int[] enemyLionPos = findLionPosition(board, getOpponentPlayer(player));
+	if (enemyLionPos != null) {
+	    int distance = Math.abs(row - enemyLionPos[0]) + Math.abs(col - enemyLionPos[1]);
+	    if (distance <= 1) {
+		return -20000; // 敵ライオンと隣接する危険
+	    }
+	}
+    
+	// 3. 安全な位置の場合
+	return SAFETY_BONUS;
+    }
+    private boolean hasImmediateAttacker(Board board, int row, int col, PlayerType owner) {
+	PlayerType opponent = getOpponentPlayer(owner);
+	for (int r = 0; r < Board.ROWS; r++) {
+	    for (int c = 0; c < Board.COLS; c++) {
+		Piece piece = board.getPiece(r, c);
+		if (piece != null && piece.getOwner() == opponent) {
+		    for (int[] move : piece.getPossibleMoves(r, c, board)) {
+			if (move[0] == row && move[1] == col) {
+			    return true;
+			}
+		    }
+		}
+	    }
+	}
+	return false;
+    }
 
     // 盤面評価をシンプルに
     private int evaluateBoard(Board board, boolean isMaximizingPlayer) {
-        PlayerType player = isMaximizingPlayer ? getPlayerType() : getOpponentPlayer(getPlayerType());
-        int score = 0;
-        
-        // 駒の価値合計
-        for (int r = 0; r < Board.ROWS; r++) {
-            for (int c = 0; c < Board.COLS; c++) {
-                Piece piece = board.getPiece(r, c);
-                if (piece != null) {
-                    score += (piece.getOwner() == player) ? getPieceValue(piece) : -getPieceValue(piece);
-                }
-            }
-        }
-        
-        // ライオン安全性チェック
-        int[] lionPos = findLionPosition(board, player);
-        if (lionPos != null) {
-            score += evaluateLionSafety(board, lionPos[0], lionPos[1]);
-        }
-        
-        return score;
-    }
-    private int evaluateLionSafety(Board board, int row, int col) {
-        if (isUnderAttack(board, row, col, getPlayerType())) {
-            return -50000; // 危険な位置には最大ペナルティ
-        }
-        return SAFETY_BONUS; // 安全な位置にはボーナス
+	PlayerType player = isMaximizingPlayer ? getPlayerType() : getOpponentPlayer(getPlayerType());
+	PlayerType opponent = getOpponentPlayer(player);
+	int score = 0;
+    
+	// 1. 駒数カウント
+	int myPieceCount = countPieces(board, player) + getCapturedPieces().size();
+	int enemyPieceCount = countPieces(board, opponent);
+	int pieceDifference = myPieceCount - enemyPieceCount;
+
+	// 2. 駒数的優位性評価
+	if (pieceDifference >= MATERIAL_THRESHOLD) {
+	    // 数的優位時は攻撃的に
+	    score += pieceDifference * MATERIAL_ADVANTAGE_MULTIPLIER * 100;
+	} else if (pieceDifference <= -MATERIAL_THRESHOLD) {
+	    // 数的劣勢時は守備的に
+	    score -= Math.abs(pieceDifference) * 200;
+	}
+
+	// 3. ライオン関連評価（駒数差を考慮）
+	int[] enemyLionPos = findLionPosition(board, opponent);
+	if (enemyLionPos != null) {
+	    // 数的優位時のみライオン捕獲を積極評価
+	    int captureBonus = (pieceDifference >= 1) ? LION_CAPTURE_THREAT : LION_CAPTURE_THREAT / 2;
+	    if (canCaptureLion(board, player, enemyLionPos[0], enemyLionPos[1])) {
+		score += captureBonus;
+	    }
+	}
+
+	// 4. トライ評価（駒数が同等以上の場合のみ）
+	if (pieceDifference >= 0) {
+	    int[] myLionPos = findLionPosition(board, player);
+	    if (myLionPos != null) {
+		int trialRow = (player == PlayerType.PLAYER1) ? Board.ROWS - 1 : 0;
+		if (myLionPos[0] == trialRow) {
+		    score += WINNING_POSITION_BONUS;
+		}
+	    }
+	}
+
+	return score;
     }
 
     // 以下は簡素化したヘルパーメソッド群
@@ -196,6 +259,33 @@ public class AlphaBeta extends Player {
             }
         }
         return null;
+    }
+    private boolean canCaptureLion(Board board, PlayerType player, int lionRow, int lionCol) {
+	for (int r = 0; r < Board.ROWS; r++) {
+	    for (int c = 0; c < Board.COLS; c++) {
+		Piece piece = board.getPiece(r, c);
+		if (piece != null && piece.getOwner() == player) {
+		    for (int[] move : piece.getPossibleMoves(r, c, board)) {
+			if (move[0] == lionRow && move[1] == lionCol) {
+			    return true;
+			}
+		    }
+		}
+	    }
+	}
+	return false;
+    }
+    private int countPieces(Board board, PlayerType player) {
+	int count = 0;
+	for (int r = 0; r < Board.ROWS; r++) {
+	    for (int c = 0; c < Board.COLS; c++) {
+		if (board.getPiece(r, c) != null && 
+		    board.getPiece(r, c).getOwner() == player) {
+		    count++;
+		}
+	    }
+	}
+	return count;
     }
 
     // 駒タイプ判定 (簡潔に)
