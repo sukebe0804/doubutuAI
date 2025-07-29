@@ -6,7 +6,7 @@ import java.util.Random;
 
 public class MinMax extends Player {
     // 探索の深さ
-    private static final int MAX_DEPTH = 8; // 探索深度を調整（計算資源と相談）
+    private static final int MAX_DEPTH = 4; // 探索深度を調整（計算資源と相談）
 
     // 駒の基本価値
     private static final int LION_VALUE = 2500; // ライオンの価値を非常に高く設定（詰み/トライはこれよりはるかに高い）
@@ -24,7 +24,7 @@ public class MinMax extends Player {
     private static final int ATTACKED_OPPONENT_PIECE_BONUS = 50; // 相手の駒を攻撃している場合のボーナスを強化
     private static final int DEFENDED_OWN_PIECE_BONUS = 30; // 自分の駒が守られている場合のボーナス (ライオン以外) を強化
     private static final int PROMOTION_THREAT_BONUS = 150; // ひよこが敵陣最奥にいる場合のボーナス
-    private static final int TRIAL_WIN_SCORE = 10000; // トライによる勝利点
+    private static final int TRIAL_WIN_SCORE = 5000; // トライによる勝利点
 
     // 駒の配置点テーブル (Piece-Square Tables) - 調整済み
     // PLAYER1 (CPU) 視点での価値。PLAYER2の駒の場合は、行を反転して使用する。
@@ -53,14 +53,14 @@ public class MinMax extends Player {
     private static final int[][] PST_ZOU = {
         {20, 30, 20}, // Row 0
         {40, 50, 40}, // Row 1
-        {60, 80, 60}, // Row 2
+        {60, 200, 60}, // Row 2
         {80, 100, 80} // Row 3
     };
 
     private static final int[][] PST_LION = {
         {-1000, -1200, -1000}, // 危険な位置は低く
         {-500, -600, -500},
-        { 0, 100, 0},
+        { 300, 100, 300},
         { 500, 1000, 500} // 自陣奥は高く
     };
 
@@ -72,7 +72,6 @@ public class MinMax extends Player {
     public int[] chooseMove(Game game) {
         // 現在のプレイヤーとボードの状態をMinMaxアルゴリズムのルートノードとして設定
         SimulationState initialState = new SimulationState(game.getBoard().clone(), game.getPlayerA().clone(), game.getPlayerB().clone(), this.getPlayerType()); // PlayerA, PlayerBはGameクラスから取得し、自身のPlayerTypeを渡す
-
         int[] bestMove = null;
         int bestValue = Integer.MIN_VALUE;
 
@@ -156,6 +155,7 @@ public class MinMax extends Player {
         // 探索終了条件
         // 1. 深さ制限に到達
         // 2. ゲームが終了（詰み、トライ勝利）
+    
         if (depth == 0 || state.isGameOver() != null) {
             return evaluate(state.board, this.getPlayerType(), state.playerA, state.playerB); // 評価関数を呼び出し
         }
@@ -671,23 +671,8 @@ public class MinMax extends Player {
         Player tempPlayerA = (currentPlayer.getPlayerType() == PlayerType.PLAYER1) ? currentPlayer.clone() : new MinMax("tempA"); // 実際にはSimulationStateのplayerA/Bをコピーする必要がある
         Player tempPlayerB = (currentPlayer.getPlayerType() == PlayerType.PLAYER2) ? currentPlayer.clone() : new MinMax("tempB"); // 実際にはSimulationStateのplayerA/Bをコピーする必要がある
 
-        // HACK: ここでPlayerオブジェクトの適切なコピーが行われていないため、SimulationStateから呼び出すように修正すべき
-        // このメソッドはMinMaxクラスの直下にあり、SimulationStateの内部状態にアクセスできないため、
-        // SimulationState内部に同様のメソッドを実装するか、MinMaxのminimaxから直接呼び出すgetAllPossibleMovesForMinimaxに含めるべき。
-        // 現在のisCheckMateで使用されているgetAllPossibleMovesWithCurrentStateは、
-        // boardとplayer (currentPlayingPlayer) を引数に取っているので、tempPlayerA/Bの生成方法を修正する。
-
-        // isCheckMateのコンテキストでは、playerAとplayerBが引数として渡されるので、それらを使う。
-        // ここはMinMaxクラスのメソッドなので、SimulationStateの内部的なPlayerインスタンスを直接参照できない。
-        // このisValidMoveInSimulationはSimulationStateの内部メソッドとして実装するのが最も自然。
-
-        // 応急処置として、MinMaxのchooseMoveで使われるgetAllPossibleMovesと、
-        // minimaxやisCheckMateで使われるgetAllPossibleMovesForSimulationの2種類に分ける。
-        // このisValidMoveInSimulationは、後者のgetAllPossibleMovesForSimulation内で使われる。
-
-        // Temporarily create a minimal SimulationState to check validity.
-        // This is a bit convoluted but necessary given the constraint.
         SimulationState tempState;
+
         if (currentPlayer.getPlayerType() == PlayerType.PLAYER1) {
              tempState = new SimulationState(board.clone(), currentPlayer.clone(), new MinMax("dummy").clone(), currentPlayer.getPlayerType()); // ダミーのPlayerB
              tempState.playerB.setPlayerType(PlayerType.PLAYER2); // ダミーにもタイプ設定
@@ -779,20 +764,28 @@ public class MinMax extends Player {
     // chooseMoveから呼ばれるソート用メソッド
     private void sortMoves(List<int[]> moves, Board board, PlayerType playerType, Game game) {
         Collections.sort(moves, (move1, move2) -> {
-            // move1とmove2の評価点（仮）を比較して並べ替え
-            // ここでは、単純に駒を取れる手を優先する
-            
-            // 簡易的な評価でソート (完全な評価は重すぎるため)
+            // ライオン捕獲手を最優先にする
+            boolean canCaptureLion1 = willCaptureLion(game.getBoard(), playerType, move1);
+            boolean canCaptureLion2 = willCaptureLion(game.getBoard(), playerType, move2);
+
+            if (canCaptureLion1 && !canCaptureLion2) {
+                return -1; // move1がライオン捕獲手で、move2がそうでない場合、move1を優先
+            }
+            if (!canCaptureLion1 && canCaptureLion2) {
+                return 1; // move2がライオン捕獲手で、move1がそうでない場合、move2を優先
+            }
+
+            // ライオン捕獲手でない、または両方ともライオン捕獲手の場合、通常の評価でソート
             int score1 = 0;
             int score2 = 0;
 
             // move1の評価: 一時的なGame状態を作成して適用
-            Game tempGame1 = game.clone(); // Gameのcloneメソッドを使用
+            Game tempGame1 = game.clone();
             applyMoveToGame(tempGame1, move1);
             score1 = evaluate(tempGame1.getBoard(), playerType, tempGame1.getPlayerA(), tempGame1.getPlayerB());
 
             // move2の評価: 一時的なGame状態を作成して適用
-            Game tempGame2 = game.clone(); // Gameのcloneメソッドを使用
+            Game tempGame2 = game.clone();
             applyMoveToGame(tempGame2, move2);
             score2 = evaluate(tempGame2.getBoard(), playerType, tempGame2.getPlayerA(), tempGame2.getPlayerB());
 
@@ -818,11 +811,74 @@ public class MinMax extends Player {
             game.performMove(move[0], move[1], move[2], move[3]);
         }
     }
+    /**
+     * 指定された手が相手のライオンを捕獲するかどうかを判定します (Gameインスタンス用)。
+     * @param board 現在の盤面
+     * @param currentPlayerType 現在の手番のプレイヤータイプ
+     * @param move チェックする手 {fromRow, fromCol, toRow, toCol} または {-1, capturedPieceIndex, toRow, toCol}
+     * @return 相手のライオンを捕獲する場合true、そうでない場合false
+     */
+    private boolean willCaptureLion(Board board, PlayerType currentPlayerType, int[] move) {
+        PlayerType opponentPlayerType = (currentPlayerType == PlayerType.PLAYER1) ? PlayerType.PLAYER2 : PlayerType.PLAYER1;
+        Board tempBoard = board.clone();
+
+        if (move[0] != -1) { // 移動の場合
+            int fromRow = move[0];
+            int fromCol = move[1];
+            int toRow = move[2];
+            int toCol = move[3];
+
+            Piece capturedPiece = tempBoard.getPiece(toRow, toCol);
+            if (capturedPiece != null && capturedPiece instanceof Lion && capturedPiece.getOwner() == opponentPlayerType) {
+                return true;
+            }
+        }
+        // 打ち込みではライオンは捕獲できないため、チェック不要
+        return false;
+    }
+
+    /**
+     * 指定された手が相手のライオンを捕獲するかどうかを判定します (SimulationState用)。
+     * @param state 現在のSimulationState
+     * @param move チェックする手 {fromRow, fromCol, toRow, toCol} または {-1, capturedPieceIndex, toRow, toCol}
+     * @return 相手のライオンを捕獲する場合true、そうでない場合false
+     */
+    private boolean willCaptureLionInSimulation(SimulationState state, int[] move) {
+        PlayerType opponentPlayerType = (state.currentPlayerType == PlayerType.PLAYER1) ? PlayerType.PLAYER2 : PlayerType.PLAYER1;
+        Board tempBoard = state.board.clone(); // 盤面をクローンして影響を与えないようにする
+
+        if (move[0] != -1) { // 移動の場合
+            int fromRow = move[0];
+            int fromCol = move[1];
+            int toRow = move[2];
+            int toCol = move[3];
+
+            // 実際に手を適用して、そのマスに相手のライオンがいるか確認
+            Piece capturedPiece = tempBoard.getPiece(toRow, toCol);
+            if (capturedPiece != null && capturedPiece instanceof Lion && capturedPiece.getOwner() == opponentPlayerType) {
+                return true;
+            }
+        }
+        // 打ち込みではライオンは捕獲できないため、チェック不要
+        return false;
+    }
 
 
     // minimaxから呼ばれるソート用メソッド
     private void sortMovesForSimulation(List<int[]> moves, SimulationState state) {
         Collections.sort(moves, (move1, move2) -> {
+            // ライオン捕獲手を最優先にする
+            boolean canCaptureLion1 = willCaptureLionInSimulation(state, move1);
+            boolean canCaptureLion2 = willCaptureLionInSimulation(state, move2);
+
+            if (canCaptureLion1 && !canCaptureLion2) {
+                return -1; // move1がライオン捕獲手で、move2がそうでない場合、move1を優先
+            }
+            if (!canCaptureLion1 && canCaptureLion2) {
+                return 1; // move2がライオン捕獲手で、move1がそうでない場合、move2を優先
+            }
+
+            // ライオン捕獲手でない、または両方ともライオン捕獲手の場合、通常の評価でソート
             int score1 = 0;
             int score2 = 0;
 
@@ -840,7 +896,6 @@ public class MinMax extends Player {
             return Integer.compare(score2, score1);
         });
     }
-
 
     // ライオンが捕獲されたかどうかの判定（isCheckMateと似ているが、直接ライオンが盤面にいないかをチェック）
     private boolean isLionCaptured(Board board, PlayerType lionOwner) {
