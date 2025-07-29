@@ -1,6 +1,7 @@
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Scanner;
+import java.util.Random; // 追加
 
 public class Game implements Cloneable {
     private Board board;
@@ -8,6 +9,7 @@ public class Game implements Cloneable {
     private boolean silentMode = false; // サイレントモードフラグ
     private Player currentPlayer;
     private PlayerType forcedWinner = null;
+    private int turnNumber;
 
     // PlayerAの指定
     // private RandomPlayer PlayerA; // ランダムプレイヤー
@@ -30,8 +32,8 @@ public class Game implements Cloneable {
     // private 変数のデータ型 変数(ここはPlayerB固定)
 
     // private QLearn PlayerB; // 加藤
-    // private MinMax PlayerB; // 西岡
-    private AlphaBeta PlayerB; //宮田
+    private MinMax PlayerB; // 西岡
+    // private AlphaBeta PlayerB; //宮田
 
     // -----------------------------------------------------------------------
 
@@ -44,6 +46,7 @@ public class Game implements Cloneable {
     public Game() {
         board = new Board();
         scanner = new Scanner(System.in);
+        turnNumber = 0;
 
         // this.PlayerA = new RandomPlayer("RandomPlayer");
         // this.PlayerA = new HumanPlayer("Human");
@@ -57,8 +60,8 @@ public class Game implements Cloneable {
         // 例: 西岡の作成したAI(MinMax.java)の場合、以下のように記述する.
         // this.PlayerB = new 変数の型("作成したAIの名前")
         // this.PlayerB = new QLearn("QLearn"); // 加藤
-        // this.PlayerB = new MinMax("MinMax"); // 西岡
-        this.PlayerB = new AlphaBeta("AlphaBeta"); // 宮田
+        this.PlayerB = new MinMax("MinMax"); // 西岡
+        // this.PlayerB = new AlphaBeta("AlphaBeta"); // 宮田
 
         // -----------------------------------------------------------------------
 
@@ -79,11 +82,11 @@ public class Game implements Cloneable {
         // this.PlayerA = new HumanPlayer("Human");
 
         // ----------------------------- 変更点その4 -----------------------------
-	// this.PlayerA = new MinMax("MinMax"); // 西岡
+	    // this.PlayerA = new MinMax("MinMax"); // 西岡
         this.PlayerA = trialedQLearn; // 加藤
 	
-	// this.PlayerB = new MinMax("MinMax"); // 西岡
-	this.PlayerB = new AlphaBeta("AlphaBata"); // 宮田
+	    this.PlayerB = new MinMax("MinMax"); // 西岡
+	    // this.PlayerB = new AlphaBeta("AlphaBata"); // 宮田
 
         // -----------------------------------------------------------------------
 
@@ -112,6 +115,51 @@ public class Game implements Cloneable {
         board.placePiece(new Hiyoko(PlayerType.PLAYER2), 2, 1);
     }
 
+    private int[] getRandomLegalMove(Player player) {
+        List<int[]> legalMoves = new ArrayList<>();
+
+        // 駒の移動による合法手の収集
+        for (int r = 0; r < Board.ROWS; r++) {
+            for (int c = 0; c < Board.COLS; c++) {
+                Piece piece = board.getPiece(r, c);
+                if (piece != null && piece.getOwner() == player.getPlayerType()) {
+                    List<int[]> possiblePieceMoves = piece.getPossibleMoves(r, c, board);
+                    for (int[] toCoord : possiblePieceMoves) {
+                        // この移動が王手にならないかチェック
+                        if (isValidMoveAndNotIntoCheck(player.getPlayerType(), r, c, toCoord[0], toCoord[1])) {
+                            legalMoves.add(new int[]{r, c, toCoord[0], toCoord[1]});
+                        }
+                    }
+                }
+            }
+        }
+
+        // 手駒を打つ合法手の収集
+        for (int i = 0; i < player.getCapturedPieces().size(); i++) {
+            Piece capturedPiece = player.getCapturedPieces().get(i);
+            for (int r = 0; r < Board.ROWS; r++) {
+                for (int c = 0; c < Board.COLS; c++) {
+                    if (board.isEmpty(r, c)) {
+                        // この打ち手が王手にならないかチェック
+                        if (isValidDropAndNotIntoCheck(player.getPlayerType(), capturedPiece, r, c)) {
+                            // ドロップの場合のフォーマット: {-1, 手駒インデックス, dropRow, dropCol}
+                            legalMoves.add(new int[]{-1, i, r, c});
+                        }
+                    }
+                }
+            }
+        }
+
+        if (legalMoves.isEmpty()) {
+            return null; // 合法手がない
+        }
+
+        // ランダムに1つ選択
+        Random rand = new Random();
+        return legalMoves.get(rand.nextInt(legalMoves.size()));
+    }
+
+
     public void startGame() {
         // 勝者を示すフィールドを追加
         PlayerType winner = null;
@@ -121,6 +169,8 @@ public class Game implements Cloneable {
             printCapturedPieces(); // 手駒の表示
 
             System.out.println("--- " + currentPlayer.getName() + "の番です ---");
+
+            turnNumber++;
 
             if (currentPlayer instanceof HumanPlayer) {
                 handleHumanTurn();
@@ -251,6 +301,27 @@ public class Game implements Cloneable {
         // 現在のプレイヤー（currentPlayer）のchooseMoveメソッドを呼び出す
         printIfNotSilent("AI is thinking...");
         int[] move = currentPlayer.chooseMove(this); // ここを修正
+
+        // 最初のターンであればランダムな手を選ぶ
+        if (turnNumber == 1) { // プレイヤーAの1手目、またはプレイヤーBの1手目（ゲーム全体で1手目か2手目）
+            // 現在のプレイヤーがPlayerAかPlayerBかによって、それぞれのランダム手を生成
+            // Playerクラスにランダムな合法手を生成するメソッドを追加するか、
+            // Gameクラス内でランダムな手を生成するロジックを実装する
+            move = getRandomLegalMove(currentPlayer);
+            if (move == null) {
+                printIfNotSilent("ランダムな合法手を見つけられませんでした。AIが詰んだ可能性があります。");
+                // 合法手が見つからなかったプレイヤーの負けにする
+                if (currentPlayer.getPlayerType() == PlayerType.PLAYER1) {
+                    this.forcedWinner = PlayerType.PLAYER2; // Player1が合法手なし → Player2の勝ち
+                } else {
+                    this.forcedWinner = PlayerType.PLAYER1; // Player2が合法手なし → Player1の勝ち
+                }
+                return;
+            }
+        } else {
+            // 2ターン目以降は通常のAIロジックで手を選ぶ
+            move = currentPlayer.chooseMove(this);
+        }
 
         if (move != null) {
             // CPUの実際の手番ではサイレントモードを無効にしてメッセージを表示
@@ -644,8 +715,8 @@ public class Game implements Cloneable {
             // 例: 西岡の作成したAI(MinMax.java)の場合、以下のように記述する.
             // clonedGame.PlayerB = (変数の型) this.PlayerB.clone();
 
-            // clonedGame.PlayerB = (MinMax) this.PlayerB.clone(); // 西岡
-            clonedGame.PlayerB = (AlphaBeta) this.PlayerB.clone(); // 宮田
+            clonedGame.PlayerB = (MinMax) this.PlayerB.clone(); // 西岡
+            // clonedGame.PlayerB = (AlphaBeta) this.PlayerB.clone(); // 宮田
             // clonedGame.PlayerB = (QLearn) this.PlayerB.clone(); // 加藤
 
             // ------------------------------------------------------------------
