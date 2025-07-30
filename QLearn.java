@@ -1,102 +1,140 @@
-import java.util.ArrayList;
-import java.util.List;
-import java.util.Random;
 import java.util.*;
 
-public class QLearn extends Player{
+public class QLearn extends Player {
 
-    private static final double ALPHA = 0.1;   // 学習率
-    private static final double GAMMA = 0.9;   // 割引率
-    private static final double EPSILON = 0.1; // ε-greedy探索率
+    private static final double ALPHA = 0.1;
+    private static final double GAMMA = 0.9;
+    private static double EPSILON = 1.0;
+    private static final double MIN_EPSILON = 0.05;
 
-    private Map<String, double[]> qTable = new HashMap<>();
+    private Map<String, Map<Integer, Double>> qTable = new HashMap<>();
     private Random rand = new Random();
 
     public QLearn(String name) {
-	super(name);
-	this.rand = new Random();
+        super(name);
     }
 
-    // ε-greedyで行動選択
+    private void decayEpsilon(int ep, int maxEpisodes) {
+        EPSILON = Math.max(MIN_EPSILON, EPSILON * 0.995);
+    }
+
     @Override
     public int[] chooseMove(Game game) {
-	String state = encodeState(game);
-	List<int[]> legalMoves = getLegalMoves(game);
+        String state = encodeState(game);
+        List<int[]> legalMoves = getLegalMoves(game);
+        if (legalMoves == null || legalMoves.isEmpty()) return null;
 
-	if (legalMoves == null || legalMoves.isEmpty()) {
-        return null; // 打てる手がない場合の処理
-	}
-	
         if (rand.nextDouble() < EPSILON) {
-            return legalMoves.get(rand.nextInt(legalMoves.size())); // ランダム行動
+            return legalMoves.get(rand.nextInt(legalMoves.size()));
         } else {
-            double[] qValues = qTable.getOrDefault(state, new double[legalMoves.size()]);
-            int bestAction = 0;
+            Map<Integer, Double> moveQMap = qTable.getOrDefault(state, new HashMap<>());
+            int[] bestAction = null;
             double bestValue = Double.NEGATIVE_INFINITY;
-            for (int i = 0; i < legalMoves.size(); i++) {
-                if (qValues[i] > bestValue) {
-                    bestValue = qValues[i];
-                    bestAction = i;
+            for (int[] move : legalMoves) {
+                //List<Integer> moveKey = Arrays.stream(move).boxed().toList();
+		int moveKey = encodeMove(move);
+                double q = moveQMap.getOrDefault(moveKey, 0.0);
+                if (q > bestValue) {
+                    bestValue = q;
+                    bestAction = move;
                 }
             }
-            return legalMoves.get(bestAction);
+            return bestAction != null ? bestAction : legalMoves.get(0);
         }
     }
 
-    // Q値の更新
-    private void updateQ(String state, int action, double reward, String nextState, int nextActionSize) {
-        double[] qValues = qTable.getOrDefault(state, new double[nextActionSize]);
-        double oldQ = qValues[action];
+    private void updateQ(String state, int[] move, double reward, String nextState, List<int[]> nextMoves) {
+        int moveKey = encodeMove(move);
+        Map<Integer, Double> qMap = qTable.computeIfAbsent(state, k -> new HashMap<>());
+        double oldQ = qMap.getOrDefault(moveKey, 0.0);
 
-        double[] nextQValues = qTable.getOrDefault(nextState, new double[nextActionSize]);
-        double maxNextQ = Arrays.stream(nextQValues).max().orElse(0.0);
+        Map<Integer, Double> nextQMap = qTable.getOrDefault(nextState, new HashMap<>());
+        double maxNextQ = 0.0;
+        for (int[] nextMove : nextMoves) {
+            int nextKey = encodeMove(nextMove);
+            double q = nextQMap.getOrDefault(nextKey, 0.0);
+            maxNextQ = Math.max(maxNextQ, q);
+        }
 
         double newQ = oldQ + ALPHA * (reward + GAMMA * maxNextQ - oldQ);
-        qValues[action] = newQ;
-
-        qTable.put(state, qValues);
+        qMap.put(moveKey, newQ);
+        qTable.put(state, qMap);
     }
 
-    // 学習ループ
     public void trial(int episodes) {
+        QLearn playerA = this;
+        RandomPlayer playerB = new RandomPlayer("Random");
+
         for (int ep = 0; ep < episodes; ep++) {
-            Game game = new Game();
-	    Board board = game.getBoard();
-	    PlayerType winner = null;
-	    boolean firstPlayer = false;
-	    Player PlayerA = game.getPlayerA();
-	    Player PlayerB = game.getPlayerB();
-            while (true) {
-		if (firstPlayer) {
-		    firstPlayer = false;
-		} else {
-		    firstPlayer = true;
-		}
-                String state = encodeState(game);
-                List<int[]> legalMoves = getLegalMoves(game);
-                int[] move = chooseMove(game);
-		if (move == null) {
-		    break; // 合法手がない＝終了
-		}
-		Piece capturedPiece = board.getPiece(move[2], move[3]);
-		
-                game.makeMove(move[0], move[1], move[2], move[3]);
-		
-                double reward = getReward(game, PlayerA, PlayerB, firstPlayer, capturedPiece);
-                String nextState = encodeState(game);
-		
-		int moveIndex = legalMoves.indexOf(move);
-                updateQ(state, moveIndex, reward, nextState, legalMoves.size());
-	        winner = game.isGameOver();
-                if (!(winner == null)) break;
+            if (ep % 10 == 0) {
+                System.out.println("trial完了率 : " + (ep * 100 / episodes) + "%");
             }
+
+            Game game = new Game(playerA, playerB);
+            game.setSilentMode(true);
+            PlayerType winner = null;
+            int turnCount = 0;
+            Map<String, Integer> stateCounts = new HashMap<>();
+
+            while (true) {
+                Player current = game.getCurrentPlayer();
+                boolean isQLearn = current instanceof QLearn;
+                String playerTag = current.getPlayerType().toString();
+                String prevState = isQLearn ? ((QLearn) current).encodeState(game) + "_" + playerTag : "";
+
+                turnCount++;
+                stateCounts.put(prevState, stateCounts.getOrDefault(prevState, 0) + 1);
+
+                int[] move = current.chooseMove(game);
+                if (move == null) {
+                    if (isQLearn) {
+                        double finalReward = -200.0;
+                        ((QLearn) current).updateQ(prevState, new int[]{0, 0, 0, 0}, finalReward, prevState, new ArrayList<>());
+                    }
+                    break;
+                }
+
+		Piece captured = null;
+		if (move[0] != -1) {
+		    captured = game.getBoard().getPiece(move[2], move[3]);
+		}
+                //Piece captured = game.getBoard().getPiece(move[2], move[3]);
+                if (move[0] == -1) {
+                    Piece pieceToDrop = current.getCapturedPieces().get(move[1]);
+                    game.performDrop(pieceToDrop, move[2], move[3]);
+                } else {
+                    game.performMove(move[0], move[1], move[2], move[3]);
+                }
+
+                if (isQLearn) {
+                    String nextState = ((QLearn) current).encodeState(game);
+                    List<int[]> nextMoves = ((QLearn) current).getLegalMoves(game);
+                    double reward = ((QLearn) current).getReward(game, captured);
+                    if (turnCount > 78) reward -= 50.0;
+                    if (turnCount >= 256) reward -= 100.0;
+                    if (stateCounts.get(prevState) >= 4) {
+                        reward -= 1000.0;
+                        ((QLearn) current).updateQ(prevState, move, reward, nextState, nextMoves);
+                        break;
+                    }
+                    ((QLearn) current).updateQ(prevState, move, reward, nextState, nextMoves);
+                }
+
+                if (turnCount >= 128) break;
+                winner = game.isGameOver();
+                if (winner != null) break;
+
+                game.switchPlayer();
+            }
+
+            playerA.decayEpsilon(ep, episodes);
         }
     }
 
     public List<int[]> getLegalMoves(Game game) {
-	List<int[]> allLegalMoves = new ArrayList<>();
-	PlayerType myPlayerType = this.getPlayerType();
-	// 1. 駒の移動に関する合法手を収集
+        List<int[]> allLegalMoves = new ArrayList<>();
+        PlayerType myPlayerType = this.getPlayerType();
+
         for (int r = 0; r < Board.ROWS; r++) {
             for (int c = 0; c < Board.COLS; c++) {
                 Piece piece = game.getBoard().getPiece(r, c);
@@ -110,7 +148,7 @@ public class QLearn extends Player{
                 }
             }
         }
-        // 2. 手駒を打つ合法手を収集
+
         List<Piece> captured = this.getCapturedPieces();
         for (int i = 0; i < captured.size(); i++) {
             Piece pieceToDrop = captured.get(i);
@@ -122,117 +160,127 @@ public class QLearn extends Player{
                 }
             }
         }
-        if (allLegalMoves.isEmpty()) {
-            return new ArrayList<>(); // 動かせる手も打てる手駒もない
-        }
-	return allLegalMoves;
+
+        return allLegalMoves;
+    }
+
+    private int encodeMove(int[] move) {
+	return (move[0] + 1) << 12 | (move[1] + 1) << 8 | (move[2] + 1) << 4 | (move[3] + 1);
+    }
+
+    private int[] decodeMove(int moveCode) {
+	return new int[] {
+	    (moveCode >> 12) - 1,
+	    ((moveCode >> 8) & 0xF) - 1,
+	    ((moveCode >> 4) & 0xF) - 1,
+	    (moveCode & 0xF) - 1
+	};
     }
 
     public String encodeState(Game game) {
         StringBuilder sb = new StringBuilder();
         for (int r = 0; r < Board.ROWS; r++) {
             for (int c = 0; c < Board.COLS; c++) {
-                sb.append(game.getBoard().getPiece(r, c));
+                Piece p = game.getBoard().getPiece(r, c);
+                sb.append(p == null ? "." : p.getSymbol().charAt(0));
             }
         }
-	sb.append(game.getCurrentPlayer() == game.getPlayerA() ? "1" : "0");
         return sb.toString();
     }
 
-    // 報酬関数
-    public double getReward(Game game, Player A, Player B, boolean isPlayer, Piece movedPiece) {
-	double reward = 0.0;
-	PlayerType winner = game.isGameOver();
+    private double getReward(Game game, Piece capturedPiece) {
+        PlayerType winner = game.isGameOver();
+        PlayerType myType = this.getPlayerType();
+        double reward = 0.0;
 
-        // 勝敗報酬
-	if (winner != null) {
-	    if ((isPlayer && winner == PlayerType.PLAYER1) || (!isPlayer && winner == PlayerType.PLAYER2)) {
-		return 1.0;  // 勝ち
-	    } else {
-		return -1.0; // 負け
-	    }
-	}
+        if (winner != null) return (winner == myType) ? 100.0 : -100.0;
+        if (capturedPiece != null) reward += getPieceValue(capturedPiece);
 
-	// 駒を取ったときの報酬
-	if (movedPiece != null) {
-	    reward += getPieceValue(movedPiece);
-	}
+        reward += 1.0 * evaluateMaterial(game, myType);
+        reward += 0.5 * evaluateKingSafety(game, myType);
+        reward += 2.5 * evaluateHandPieceValue(game, myType);
+        reward += 1.0 * evaluatePiecePosition(game, myType);
 
-	// 駒の価値差を評価
-	int materialBalance = evaluateMaterial(game, isPlayer ? PlayerType.PLAYER1 : PlayerType.PLAYER2);
-	reward += 0.05 * materialBalance;
-
-	// 玉の安全性（例：周囲に味方駒が多いほど良い）
-	reward += 0.03 * evaluateKingSafety(game, isPlayer ? PlayerType.PLAYER1 : PlayerType.PLAYER2);
-
-	return reward;
+        return reward;
     }
 
-    // 駒の価値を定義（仮に：ライオン=5, ぞう=3, きりん=3, ひよこ=1）
-    private int getPieceValue(Piece piece) {
-	if (piece == null) return 0;
-	switch (piece.getSymbol()) {
-        case "獅":
-	case "ラ":
-	    return 5;
-	case "象":
-	case "ゾ":
-	    return 3;
-	case "麒":
-	case "キ":
-	    return 3;
-	case "鶏":
-	case "に":
-	    return 2;
-	case "ひ":
-	case "ヒ":
-	    return 1;
-	default: return 0;
-	}
+    private double evaluateHandPieceValue(Game game, PlayerType myType) {
+        double score = 0.0;
+        List<Piece> hand = (myType == this.getPlayerType()) ? this.getCapturedPieces() : game.getOpponent(this).getCapturedPieces();
+        for (Piece p : hand) score += getPieceValue(p);
+        return score;
     }
 
-    // 自駒と敵駒の価値の差を返す
-    private int evaluateMaterial(Game game, PlayerType myType) {
-	int score = 0;
-	for (int r = 0; r < Board.ROWS; r++) {
-	    for (int c = 0; c < Board.COLS; c++) {
-		Piece p = game.getBoard().getPiece(r, c);
-		if (p != null) {
-		    int value = getPieceValue(p);
-		    score += (p.getOwner() == myType) ? value : -value;
-		}
-	    }
-	}
-	// 持ち駒も含めて評価
-	for (Piece p : getCapturedPieces()) {
-	    score += getPieceValue(p);
-	}
-	return score;
+    private double evaluatePiecePosition(Game game, PlayerType myType) {
+        double score = 0.0;
+        for (int r = 0; r < Board.ROWS; r++) {
+            for (int c = 0; c < Board.COLS; c++) {
+                Piece p = game.getBoard().getPiece(r, c);
+                if (p != null && p.getOwner() == myType) {
+                    double val = getPieceValue(p);
+                    int distance = (myType == PlayerType.PLAYER1) ? r : (Board.ROWS - 1 - r);
+                    score += val * (1 + distance * 0.1);
+                }
+            }
+        }
+        return score;
     }
 
-    // 玉の安全性を評価（例：味方駒に囲まれてるほど良い）
-    private int evaluateKingSafety(Game game, PlayerType myType) {
-	int safety = 0;
-	for (int r = 0; r < Board.ROWS; r++) {
-	    for (int c = 0; c < Board.COLS; c++) {
-		Piece p = game.getBoard().getPiece(r, c);
-		if (p != null && (p.getSymbol() == "獅" || p.getSymbol() == "ラ") && p.getOwner() == myType) {
-		    int[][] directions = {{-1,0},{1,0},{0,-1},{0,1}};
-		    for (int[] d : directions) {
-			int nr = r + d[0], nc = c + d[1];
-			if (0 <= nr && nr < Board.ROWS && 0 <= nc && nc < Board.COLS) {
-			    Piece neighbor = game.getBoard().getPiece(nr, nc);
-			    if (neighbor != null && neighbor.getOwner() == myType) {
-				safety++;
-			    }
-			}
-		    }
-		}
-	    }
+    private double getPieceValue(Piece piece) {
+        if (piece == null) return 0;
+        switch (piece.getSymbol()) {
+	case "獅", "ラ" -> {
+	    return 5.0;
 	}
-	return safety;
+	case "象", "ゾ", "麒", "キ" -> {
+	    return 3.0;
+	}
+	case "鶏", "に" -> {
+	    return 2.0;
+	}
+	case "ひ", "ヒ" -> {
+	    return 1.0;
+	}
+	default -> {
+	    return 0.0;
+	}
+        }
     }
 
+    private double evaluateMaterial(Game game, PlayerType myType) {
+        double score = 0;
+        for (int r = 0; r < Board.ROWS; r++) {
+            for (int c = 0; c < Board.COLS; c++) {
+                Piece p = game.getBoard().getPiece(r, c);
+                if (p != null) {
+                    double value = getPieceValue(p);
+                    score += (p.getOwner() == myType) ? value : -value;
+                }
+            }
+        }
+        for (Piece p : getCapturedPieces()) score += getPieceValue(p);
+        return score;
+    }
+
+    private double evaluateKingSafety(Game game, PlayerType myType) {
+        int safety = 0;
+        for (int r = 0; r < Board.ROWS; r++) {
+            for (int c = 0; c < Board.COLS; c++) {
+                Piece p = game.getBoard().getPiece(r, c);
+                if (p != null && ("獅".equals(p.getSymbol()) || "ラ".equals(p.getSymbol())) && p.getOwner() == myType) {
+                    int[][] dirs = {{-1,0},{1,0},{0,-1},{0,1}};
+                    for (int[] d : dirs) {
+                        int nr = r + d[0], nc = c + d[1];
+                        if (0 <= nr && nr < Board.ROWS && 0 <= nc && nc < Board.COLS) {
+                            Piece neighbor = game.getBoard().getPiece(nr, nc);
+                            if (neighbor != null && neighbor.getOwner() == myType) safety++;
+                        }
+                    }
+                }
+            }
+        }
+        return safety;
+    }
 
     @Override
     public QLearn clone() {
