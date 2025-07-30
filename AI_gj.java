@@ -1,5 +1,3 @@
-// AI_gj.java
-
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
@@ -52,7 +50,7 @@ public class AI_gj extends Player {
     @Override
     public int[] chooseMove(Game game) {
         // 現在のプレイヤータイプを設定
-        this.setPlayerType(game.getCurrentPlayerType());
+        this.setPlayerType(game.getCurrentPlayer().getPlayerType());
 
         // すべての合法手を生成
         List<int[]> legalMoves = getAllPossibleMoves(game);
@@ -79,27 +77,12 @@ public class AI_gj extends Player {
                 int fromCol = move[2];
                 int toRow = move[3];
                 int toCol = move[4];
-                boolean promote = (move.length == 6 && move[5] == 1); // 成りフラグ
-                
-                // 元の駒を取得
-                Piece originalPiece = newGame.getBoard().getPiece(fromRow, fromCol);
                 
                 // 仮の移動を実行
-                newGame.performMove(fromRow, fromCol, toRow, toCol, promote);
-
+                newGame.performMove(fromRow, fromCol, toRow, toCol);
+                
                 // 評価
                 int value = minimax(newGame, MAX_DEPTH, Integer.MIN_VALUE, Integer.MAX_VALUE, false);
-
-                // 盤面を元に戻す (Gameのクローンを使うため不要だが、概念的に)
-                // newGameはクローンなので、このループの次で新しいクローンが作られるため、明示的に元に戻す必要はない
-                // ただし、思考プロセスを明確にするために記述する
-                // newGame.undoMove(originalPiece, fromRow, fromCol, toRow, toCol); 
-
-                // 成った駒を元に戻す処理（Hiyokoの場合のみ）
-                if (originalPiece instanceof Hiyoko && originalPiece.isPromoted() && promote) {
-                    ((Hiyoko)originalPiece).unPromote(); // promoteメソッドの対義語としてunPromoteがあるはず
-                }
-
 
                 if (value > bestValue) {
                     bestValue = value;
@@ -110,8 +93,6 @@ public class AI_gj extends Player {
                 int toRow = move[2];
                 int toCol = move[3];
 
-                // 仮の打ち込みを実行
-                // newGame.performDrop(this.getCapturedPieces().get(pieceIndex), toRow, toCol); // 元の手駒リストを使うとバグるので、クローンしたGameから取得
                 // 打ち込む駒のタイプを特定し、新しいインスタンスを作成する（重要！）
                 Piece pieceToDrop = null;
                 // GameのPlayerAまたはPlayerBから手駒を取得
@@ -121,10 +102,7 @@ public class AI_gj extends Player {
                     if (capturedPiece instanceof Hiyoko) {
                         pieceToDrop = new Hiyoko(this.playerType);
                         if (capturedPiece.isPromoted()) {
-                            // もし手駒が成った状態なら、それはにわとりに変化しているので、
-                            // 新しいHiyokoインスタンスも成った状態にしてから打ち込む
-                            // ただし、手駒は強制的に成り解除されるため、このifは不要だが、念のため
-                            ((Hiyoko) pieceToDrop).promote(); // Hiyoko.javaにpromote()がある前提
+                            ((Hiyoko) pieceToDrop).promote();
                         }
                     } else if (capturedPiece instanceof Kirin) {
                         pieceToDrop = new Kirin(this.playerType);
@@ -180,10 +158,8 @@ public class AI_gj extends Player {
                     int fromCol = move[2];
                     int toRow = move[3];
                     int toCol = move[4];
-                    boolean promote = (move.length == 6 && move[5] == 1);
                     
-                    Piece originalPiece = newGame.getBoard().getPiece(fromRow, fromCol);
-                    newGame.performMove(fromRow, fromCol, toRow, toCol, promote);
+                    newGame.performMove(fromRow, fromCol, toRow, toCol);
 
                     int eval = minimax(newGame, depth - 1, alpha, beta, false);
                     maxEval = Math.max(maxEval, eval);
@@ -204,7 +180,7 @@ public class AI_gj extends Player {
                             pieceToDrop = new Hiyoko(this.playerType);
                             // 手駒は強制的に成り解除されるため、このifは不要だが、念のため
                             if (captured.isPromoted()) {
-                                ((Hiyoko) captured).unPromote(); // 成り状態を解除 (Hiyoko.javaにunPromote()がある前提)
+                                ((Hiyoko) captured).unPromote(); // 成り状態を解除
                             }
                         } else if (captured instanceof Kirin) {
                             pieceToDrop = new Kirin(this.playerType);
@@ -237,10 +213,8 @@ public class AI_gj extends Player {
                     int fromCol = move[2];
                     int toRow = move[3];
                     int toCol = move[4];
-                    boolean promote = (move.length == 6 && move[5] == 1);
 
-                    Piece originalPiece = newGame.getBoard().getPiece(fromRow, fromCol);
-                    newGame.performMove(fromRow, fromCol, toRow, toCol, promote);
+                    newGame.performMove(fromRow, fromCol, toRow, toCol);
 
                     int eval = minimax(newGame, depth - 1, alpha, beta, true);
                     minEval = Math.min(minEval, eval);
@@ -263,7 +237,7 @@ public class AI_gj extends Player {
                         if (captured instanceof Hiyoko) {
                             pieceToDrop = new Hiyoko(currentPlayerType); // 相手のプレイヤータイプで駒を作成
                             if (captured.isPromoted()) {
-                                ((Hiyoko) captured).unPromote(); // 成り状態を解除 (Hiyoko.javaにunPromote()がある前提)
+                                ((Hiyoko) captured).unPromote(); // 成り状態を解除
                             }
                         } else if (captured instanceof Kirin) {
                             pieceToDrop = new Kirin(currentPlayerType);
@@ -454,7 +428,7 @@ public class AI_gj extends Player {
     private List<int[]> getAllPossibleMoves(Game game) {
         List<int[]> allPossibleMoves = new ArrayList<>();
         Board currentBoard = game.getBoard();
-        PlayerType myPlayerType = game.getCurrentPlayerType();
+        PlayerType myPlayerType = game.getCurrentPlayer().getPlayerType();
 
         // 1. 駒の移動の合法手を収集
         for (int r = 0; r < Board.ROWS; r++) {
@@ -466,9 +440,9 @@ public class AI_gj extends Player {
                         // 成りのチェック（ひよこが敵陣に入るとき）
                         boolean canPromote = false;
                         if (piece instanceof Hiyoko) {
-                            if (myPlayerType == PlayerType.PLAYER1 && move[0] >= Board.ROWS - 1) { // Player1が一番下の行に到達
+                            if (myPlayerType == PlayerType.PLAYER1 && move[0] == Board.ROWS - 1) { // Player1が一番下の行に到達
                                 canPromote = true;
-                            } else if (myPlayerType == PlayerType.PLAYER2 && move[0] <= 0) { // Player2が一番上の行に到達
+                            } else if (myPlayerType == PlayerType.PLAYER2 && move[0] == 0) { // Player2が一番上の行に到達
                                 canPromote = true;
                             }
                         }
@@ -476,7 +450,7 @@ public class AI_gj extends Player {
                         // 移動が合法で、かつ王手にならないかチェック
                         // GameクラスのisValidMoveAndNotIntoCheckメソッドを直接利用。
                         if (game.isValidMoveAndNotIntoCheck(myPlayerType, r, c, move[0], move[1])) {
-                            allPossibleMoves.add(new int[]{0, r, c, move[0], move[1], 0}); // 成らない手
+                            allPossibleMoves.add(new int[]{0, r, c, move[0], move[1]}); // 成らない手
                             if (canPromote) {
                                 allPossibleMoves.add(new int[]{0, r, c, move[0], move[1], 1}); // 成る手
                             }
