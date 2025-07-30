@@ -841,4 +841,10 @@ public class Game implements Cloneable {
 	}
     }
     //  ---------------------ここまで新メソッドを追加(加藤)------------------------
+
+    // ----------------------ここから新メソッド追加（栗政）-------------------------
+    public PlayerType getCurrentPlayerType() {
+        return currentPlayer.getPlayerType();
+    }
+    // -------------------------ここまで新メソッド追加-----------------------------
 }
