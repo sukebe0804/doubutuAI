@@ -12,12 +12,33 @@ public class AlphaBeta extends Player {
     private static final int CHICK_VALUE = 200;
     private static final int HEN_VALUE = 400;
     
-    // 評価パラメータ
+    // 調整された評価パラメータ
     private static final int CAPTURE_BONUS = 2500;
-    private static final int SAFETY_BONUS = 100;
+    private static final int SAFETY_BONUS = 80;
+    private static final int MOBILITY_WEIGHT = 20;
+    private static final int DEFENSIVE_POSITION_BONUS = 200;
+    private static final int KING_PROTECTION_BONUS = 400;
+    private static final int PIECE_COORDINATION_BONUS = 100;
+    private static final int OPPONENT_MOBILITY_PENALTY = 8;
+    private static final int PIN_BONUS = 300;
+    private static final int OPPONENT_TRY_THREAT = -1200;
+    private static final int TRY_BONUS = 15000;
+    private static final int ELEPHANT_ACTIVITY_BONUS = 150;
+    private static final int GIRAFFE_ACTIVITY_BONUS = 150;
+    private static final int CENTRAL_CONTROL_BONUS = 80;
+    private static final int PIECE_CONTROL_BONUS = 10;
+    private static final int CENTRAL_SQUARE_BONUS = 30;
+    private static final int ENEMY_TERRITORY_BONUS = 20;
+    private static final int OVEREXTENSION_PENALTY = 30;
+    private static final int LION_OVEREXTENSION_PENALTY = 150;
+    private static final int PINNED_PENALTY = 150;
+    private static final int LION_PINNED_PENALTY = 300;
+    private static final int OPPONENT_LION_THREAT = 80;
+    private static final int LION_CORNER_PENALTY = 500;
+    private static final int LION_EDGE_PENALTY = 250;
+    
     private static final int MAX_DEPTH = 4;
     
-    // Tabuリスト関連
     private final LinkedList<int[]> tabuList = new LinkedList<>();
     private static final int TABU_LIST_SIZE = 3;
 
@@ -27,12 +48,17 @@ public class AlphaBeta extends Player {
 
     @Override
     public int[] chooseMove(Game game) {
+        int[] tryMove = findTryMove(game);
+        if (tryMove != null) {
+            addToTabuList(tryMove);
+            return tryMove;
+        }
+
         List<int[]> allMoves = getAllPossibleMoves(game);
         List<int[]> legalMoves = new ArrayList<>();
-        
+        game.setSilentMode(true);
         boolean inCheck = game.isKingInCheck(getPlayerType());
         
-        // 合法手をフィルタリング
         for (int[] move : allMoves) {
             Game simulatedGame = game.clone();
             applyMove(simulatedGame, move);
@@ -41,25 +67,68 @@ public class AlphaBeta extends Player {
             }
         }
 
-        List<int[]> moves = inCheck ? legalMoves : allMoves;
-        
-        // Tabuリストでフィルタリング
-        List<int[]> filteredMoves = moves.stream()
+        if (legalMoves.isEmpty()) {
+            return null;
+        }
+
+        List<int[]> filteredMoves = legalMoves.stream()
             .filter(move -> !isTabuMove(move))
             .collect(Collectors.toList());
             
         if (filteredMoves.isEmpty()) {
             tabuList.clear();
-            filteredMoves = new ArrayList<>(moves);
+            filteredMoves = new ArrayList<>(legalMoves);
         }
-
+        
         int[] bestMove = selectBestMove(filteredMoves, game);
-        addToTabuList(bestMove);
+        if (bestMove != null) {
+            addToTabuList(bestMove);
+        }
+	game.setSilentMode(false);
         return bestMove;
     }
 
+    private int[] findTryMove(Game game) {
+        Board board = game.getBoard();
+        PlayerType player = getPlayerType();
+        int tryRow = getTryRow(player);
+        
+        int[] lionPos = findLionPosition(board, player);
+        if (lionPos == null) return null;
+        
+        if (lionPos[0] == tryRow) {
+            return null;
+        }
+        
+        Lion lion = (Lion)board.getPiece(lionPos[0], lionPos[1]);
+        List<int[]> possibleMoves = lion.getPossibleMoves(lionPos[0], lionPos[1], board);
+        
+        for (int[] move : possibleMoves) {
+            if (move[0] == tryRow) {
+                Game simulatedGame = game.clone();
+                simulatedGame.performMove(lionPos[0], lionPos[1], move[0], move[1]);
+                if (!simulatedGame.isKingInCheck(player)) {
+                    return new int[]{lionPos[0], lionPos[1], move[0], move[1]};
+                }
+            }
+        }
+        
+        return null;
+    }
+
+    private int getTryRow(PlayerType player) {
+        return (player == PlayerType.PLAYER1) ? 3 : 0;
+    }
+
     private int[] selectBestMove(List<int[]> moves, Game game) {
-        int[] bestMove = null;
+        if (moves.isEmpty()) {
+            return null;
+        }
+
+        int pieceCount = countPieces(game.getBoard());
+        int dynamicDepth = (pieceCount < 6) ? MAX_DEPTH + 1 : MAX_DEPTH;
+        
+        int[] bestMove = moves.get(0);
         int bestValue = Integer.MIN_VALUE;
         
         game.setSilentMode(true);
@@ -68,7 +137,7 @@ public class AlphaBeta extends Player {
             applyMove(newGame, move);
             
             int moveValue = evaluateMove(newGame, move);
-            moveValue += alphaBeta(newGame, MAX_DEPTH-1, Integer.MIN_VALUE, Integer.MAX_VALUE, false);
+            moveValue += alphaBeta(newGame, dynamicDepth-1, Integer.MIN_VALUE, Integer.MAX_VALUE, false);
             
             if (moveValue > bestValue) {
                 bestValue = moveValue;
@@ -76,11 +145,616 @@ public class AlphaBeta extends Player {
             }
         }
         game.setSilentMode(false);
+        
         return bestMove;
     }
 
-    // Tabuリスト管理
+    private int evaluateMove(Game game, int[] move) {
+        Board board = game.getBoard();
+        PlayerType player = getPlayerType();
+        PlayerType opponent = getOpponentPlayer(player);
+        int score = 0;
+
+        if (isTryMove(board, move, player)) {
+            score += TRY_BONUS;
+        }
+
+        if (isCaptureMove(game, move)) {
+            Piece target = board.getPiece(move[2], move[3]);
+            score += getPieceValue(target) * 1.5;
+
+            if (!isUnderAttack(board, move[2], move[3], player)) {
+                score += CAPTURE_BONUS;
+            }
+        }
+
+        if (move[0] != -1 && board.getPiece(move[0], move[1]) instanceof Lion) {
+            score += evaluateLionPosition(move[2], move[3], player);
+        }
+
+        score += evaluatePieceControl(board, player) * 0.8;
+        score += evaluateOpponentControl(board, player) * 0.8;
+        score += evaluatePieceCooperation(board, player) * 0.7;
+        score += evaluateOverExtension(board, player) * 0.7;
+        score += evaluateDangerPatterns(board, player) * 0.7;
+        score += evaluatePinnedPieces(board, move, player) * 0.6;
+
+        if (move[0] != -1) {
+            Piece movedPiece = board.getPiece(move[0], move[1]);
+            if (movedPiece instanceof Zou) {
+                score += evaluateElephantActivity(board, move, player) * 0.8;
+            } else if (movedPiece instanceof Kirin) {
+                score += evaluateGiraffeActivity(board, move, player) * 0.8;
+            }
+        }
+
+        score += evaluateCentralControl(board, move, player) * 0.8;
+        score += evaluateMobility(board, player) * 0.9;
+        score += evaluateDefensivePositions(board, player) * 0.7;
+        score += evaluateKingProtection(board, player) * 0.7;
+        score += evaluateOpponentTryThreat(board, player, opponent) * 0.8;
+
+        return score;
+    }
+
+    private int evaluateLionPosition(int row, int col, PlayerType player) {
+        int score = 0;
+        
+        if (player == PlayerType.PLAYER1) {
+            if ((row == 0 && col == 0) || (row == 0 && col == 2)) {
+                score -= LION_CORNER_PENALTY;
+            } else if (row == 0) {
+                score -= LION_EDGE_PENALTY;
+            }
+        } else {
+            if ((row == 3 && col == 0) || (row == 3 && col == 2)) {
+                score -= LION_CORNER_PENALTY;
+            } else if (row == 3) {
+                score -= LION_EDGE_PENALTY;
+            }
+        }
+        
+        if ((row == 1 || row == 2) && col == 1) {
+            score += CENTRAL_SQUARE_BONUS * 2;
+        }
+        
+        return score;
+    }
+
+    private int evaluatePieceControl(Board board, PlayerType player) {
+        int controlScore = 0;
+        
+        for (int r = 0; r < Board.ROWS; r++) {
+            for (int c = 0; c < Board.COLS; c++) {
+                Piece piece = board.getPiece(r, c);
+                if (piece != null && piece.getOwner() == player) {
+                    int controlCount = piece.getPossibleMoves(r, c, board).size();
+                    controlScore += controlCount * PIECE_CONTROL_BONUS;
+                    
+                    if ((r == 1 && c == 1) || (r == 2 && c == 1)) {
+                        controlScore += CENTRAL_SQUARE_BONUS;
+                    }
+                    if ((player == PlayerType.PLAYER1 && r == 3) || 
+                        (player == PlayerType.PLAYER2 && r == 0)) {
+                        controlScore += ENEMY_TERRITORY_BONUS;
+                    }
+                }
+            }
+        }
+        
+        return controlScore;
+    }
+
+    private int evaluateOpponentControl(Board board, PlayerType player) {
+        int penalty = 0;
+        PlayerType opponent = getOpponentPlayer(player);
+        
+        for (int r = 0; r < Board.ROWS; r++) {
+            for (int c = 0; c < Board.COLS; c++) {
+                Piece piece = board.getPiece(r, c);
+                if (piece != null && piece.getOwner() == opponent) {
+                    int threatCount = piece.getPossibleMoves(r, c, board).size();
+                    penalty -= threatCount * OPPONENT_MOBILITY_PENALTY;
+                    
+                    if ((player == PlayerType.PLAYER1 && r <= 1) || 
+                        (player == PlayerType.PLAYER2 && r >= 2)) {
+                        penalty -= 15;
+                    }
+                }
+            }
+        }
+        
+        return penalty;
+    }
+
+    private int evaluatePieceCooperation(Board board, PlayerType player) {
+        int cooperationScore = 0;
+        int[] lionPos = findLionPosition(board, player);
+        
+        if (lionPos != null) {
+            for (int r = Math.max(0, lionPos[0]-1); r <= Math.min(3, lionPos[0]+1); r++) {
+                for (int c = Math.max(0, lionPos[1]-1); c <= Math.min(2, lionPos[1]+1); c++) {
+                    if (r == lionPos[0] && c == lionPos[1]) continue;
+                    
+                    Piece piece = board.getPiece(r, c);
+                    if (piece != null && piece.getOwner() == player) {
+                        cooperationScore += 80;
+                        
+                        if (piece instanceof Zou || piece instanceof Kirin) {
+                            cooperationScore += 100;
+                        }
+                    }
+                }
+            }
+        }
+        
+        return cooperationScore;
+    }
+
+    private int evaluateOverExtension(Board board, PlayerType player) {
+        int penalty = 0;
+        int homeRow = (player == PlayerType.PLAYER1) ? 0 : 3;
+        
+        for (int r = 0; r < Board.ROWS; r++) {
+            for (int c = 0; c < Board.COLS; c++) {
+                Piece piece = board.getPiece(r, c);
+                if (piece != null && piece.getOwner() == player) {
+                    int distance = (player == PlayerType.PLAYER1) ? r : 3 - r;
+                    if (distance > 2) {
+                        penalty -= OVEREXTENSION_PENALTY * distance;
+                        
+                        if (piece instanceof Lion) {
+                            penalty -= LION_OVEREXTENSION_PENALTY;
+                        }
+                    }
+                }
+            }
+        }
+        
+        return penalty;
+    }
+
+    private int evaluateDangerPatterns(Board board, PlayerType player) {
+        int penalty = 0;
+        PlayerType opponent = getOpponentPlayer(player);
+        
+        int[] opponentLionPos = findLionPosition(board, opponent);
+        if (opponentLionPos != null) {
+            int distance = (player == PlayerType.PLAYER1) ? 
+                opponentLionPos[0] : 3 - opponentLionPos[0];
+            penalty -= (3 - distance) * OPPONENT_LION_THREAT;
+        }
+        
+        penalty += evaluatePinnedPieces(board, player);
+        
+        return penalty;
+    }
+
+    private int evaluatePinnedPieces(Board board, PlayerType player) {
+        int penalty = 0;
+        
+        for (int r = 0; r < Board.ROWS; r++) {
+            for (int c = 0; c < Board.COLS; c++) {
+                Piece piece = board.getPiece(r, c);
+                if (piece != null && piece.getOwner() == player) {
+                    if (isPinned(board, r, c, player)) {
+                        penalty -= PINNED_PENALTY;
+                        if (piece instanceof Lion) {
+                            penalty -= LION_PINNED_PENALTY;
+                        }
+                    }
+                }
+            }
+        }
+        
+        return penalty;
+    }
+
+    private boolean isPinned(Board board, int row, int col, PlayerType player) {
+        int[] lionPos = findLionPosition(board, player);
+        if (lionPos == null) return false;
+        
+        if (row == lionPos[0] || col == lionPos[1]) {
+            return true;
+        }
+        
+        return false;
+    }
+
+    private int countPieces(Board board) {
+        int count = 0;
+        for (int r = 0; r < Board.ROWS; r++) {
+            for (int c = 0; c < Board.COLS; c++) {
+                if (board.getPiece(r, c) != null) {
+                    count++;
+                }
+            }
+        }
+        return count;
+    }
+
+    private boolean isTryMove(Board board, int[] move, PlayerType player) {
+        if (move[0] == -1) return false;
+        
+        Piece piece = board.getPiece(move[0], move[1]);
+        if (!(piece instanceof Lion)) return false;
+        
+        int tryRow = getTryRow(player);
+        return move[2] == tryRow;
+    }
+
+    private int evaluateOpponentMobilityRestriction(Game game, int[] move, PlayerType player) {
+        Game simulatedGame = game.clone();
+        applyMove(simulatedGame, move);
+        Board newBoard = simulatedGame.getBoard();
+        PlayerType opponent = getOpponentPlayer(player);
+        
+        int opponentMobility = 0;
+        for (int r = 0; r < Board.ROWS; r++) {
+            for (int c = 0; c < Board.COLS; c++) {
+                Piece piece = newBoard.getPiece(r, c);
+                if (piece != null && piece.getOwner() == opponent) {
+                    opponentMobility += piece.getPossibleMoves(r, c, newBoard).size();
+                }
+            }
+        }
+        
+        return -opponentMobility * OPPONENT_MOBILITY_PENALTY;
+    }
+
+    private int evaluatePinnedPieces(Board board, int[] move, PlayerType player) {
+        if (move[0] == -1) return 0;
+        
+        int pinScore = 0;
+        int toRow = move[2], toCol = move[3];
+        Piece movedPiece = board.getPiece(move[0], move[1]);
+        
+        for (int[] dir : new int[][]{{1,0},{-1,0},{0,1},{0,-1}}) {
+            int r = toRow + dir[0], c = toCol + dir[1];
+            while (board.isValidCoordinate(r, c)) {
+                Piece piece = board.getPiece(r, c);
+                if (piece != null) {
+                    if (piece.getOwner() != player && isPinning(movedPiece, piece)) {
+                        pinScore += PIN_BONUS;
+                    }
+                    break;
+                }
+                r += dir[0];
+                c += dir[1];
+            }
+        }
+        return pinScore;
+    }
+
+    private boolean isPinning(Piece attacker, Piece defender) {
+        return (attacker instanceof Zou || attacker instanceof Kirin) && 
+               !(defender instanceof Lion);
+    }
+
+    private int evaluateElephantActivity(Board board, int[] move, PlayerType player) {
+        int activity = 0;
+        
+        if ((move[2] == 1 || move[2] == 2) && (move[3] == 1)) {
+            activity += ELEPHANT_ACTIVITY_BONUS;
+        }
+        
+        int enemyTerritory = (player == PlayerType.PLAYER1) ? 3 : 0;
+        if (Math.abs(move[2] - enemyTerritory) <= 1) {
+            activity += ELEPHANT_ACTIVITY_BONUS / 2;
+        }
+        
+        return activity;
+    }
+
+    private int evaluateGiraffeActivity(Board board, int[] move, PlayerType player) {
+        int activity = 0;
+        
+        if ((move[2] == 1 || move[2] == 2) && (move[3] == 1)) {
+            activity += GIRAFFE_ACTIVITY_BONUS;
+        }
+        
+        int enemyTerritory = (player == PlayerType.PLAYER1) ? 3 : 0;
+        if (Math.abs(move[2] - enemyTerritory) <= 1) {
+            activity += GIRAFFE_ACTIVITY_BONUS / 2;
+        }
+        
+        return activity;
+    }
+
+    private int evaluateCentralControl(Board board, int[] move, PlayerType player) {
+        int control = 0;
+        
+        if (move[2] == 1 && move[3] == 1) {
+            control += CENTRAL_CONTROL_BONUS;
+        }
+        if (move[2] == 2 && move[3] == 1) {
+            control += CENTRAL_CONTROL_BONUS;
+        }
+        
+        return control;
+    }
+
+    private int evaluateBoard(Board board, boolean isMaximizingPlayer) {
+        PlayerType player = isMaximizingPlayer ? getPlayerType() : getOpponentPlayer(getPlayerType());
+        int score = 0;
+        
+        for (int r = 0; r < Board.ROWS; r++) {
+            for (int c = 0; c < Board.COLS; c++) {
+                Piece piece = board.getPiece(r, c);
+                if (piece != null) {
+                    score += (piece.getOwner() == player) ? 
+                        getPieceValue(piece) : -getPieceValue(piece);
+                }
+            }
+        }
+        
+        int[] lionPos = findLionPosition(board, player);
+        if (lionPos != null && lionPos[0] == getTryRow(player)) {
+            score += TRY_BONUS / 2;
+        }
+        
+        score += evaluatePieceControl(board, player) * 0.8;
+        score += evaluateOpponentControl(board, player) * 0.8;
+        score += evaluatePieceCooperation(board, player) * 0.7;
+        score += evaluateOverExtension(board, player) * 0.7;
+        score += evaluateDangerPatterns(board, player) * 0.7;
+        score += evaluateMobility(board, player) * 0.9;
+        score += evaluateDefensivePositions(board, player) * 0.7;
+        score += evaluateKingProtection(board, player) * 0.7;
+        score += evaluatePieceCoordination(board, player) * 0.8;
+        score += evaluateOpponentTryThreat(board, player, getOpponentPlayer(player)) * 0.8;
+        score += evaluateCentralControl(board, player) * 0.8;
+        
+        return score;
+    }
+
+    private int evaluateCentralControl(Board board, PlayerType player) {
+        int control = 0;
+        
+        for (int[] pos : new int[][]{{1,1},{2,1}}) {
+            Piece piece = board.getPiece(pos[0], pos[1]);
+            if (piece != null && piece.getOwner() == player) {
+                control += CENTRAL_CONTROL_BONUS;
+            }
+        }
+        
+        return control;
+    }
+
+    private int evaluateMobility(Board board, PlayerType player) {
+        int mobilityScore = 0;
+        
+        for (int r = 0; r < Board.ROWS; r++) {
+            for (int c = 0; c < Board.COLS; c++) {
+                Piece piece = board.getPiece(r, c);
+                if (piece != null && piece.getOwner() == player) {
+                    int moves = piece.getPossibleMoves(r, c, board).size();
+                    mobilityScore += moves * MOBILITY_WEIGHT;
+                    
+                    if (piece instanceof Lion || piece instanceof Hiyoko) {
+                        mobilityScore += moves * MOBILITY_WEIGHT / 2;
+                    }
+                }
+            }
+        }
+        return mobilityScore;
+    }
+
+    private int evaluateDefensivePositions(Board board, PlayerType player) {
+        int defenseScore = 0;
+        int homeRow = (player == PlayerType.PLAYER1) ? 0 : 3;
+        
+        for (int r = 0; r < Board.ROWS; r++) {
+            for (int c = 0; c < Board.COLS; c++) {
+                Piece piece = board.getPiece(r, c);
+                if (piece != null && piece.getOwner() == player) {
+                    if (r == homeRow || (r == homeRow + (player == PlayerType.PLAYER1 ? 1 : -1))) {
+                        defenseScore += DEFENSIVE_POSITION_BONUS;
+                    }
+                    
+                    if ((r == 1 || r == 2) && (c == 1)) {
+                        defenseScore += DEFENSIVE_POSITION_BONUS / 2;
+                    }
+                }
+            }
+        }
+        return defenseScore;
+    }
+
+    private int evaluateKingProtection(Board board, PlayerType player) {
+        int[] lionPos = findLionPosition(board, player);
+        if (lionPos == null) return 0;
+        
+        int protectionScore = 0;
+        int defenderCount = 0;
+        
+        for (int r = Math.max(0, lionPos[0]-1); r <= Math.min(Board.ROWS-1, lionPos[0]+1); r++) {
+            for (int c = Math.max(0, lionPos[1]-1); c <= Math.min(Board.COLS-1, lionPos[1]+1); c++) {
+                if (r == lionPos[0] && c == lionPos[1]) continue;
+                
+                Piece piece = board.getPiece(r, c);
+                if (piece != null && piece.getOwner() == player) {
+                    defenderCount++;
+                    if (piece instanceof Zou || piece instanceof Kirin) {
+                        protectionScore += KING_PROTECTION_BONUS / 2;
+                    }
+                }
+            }
+        }
+        
+        protectionScore += defenderCount * KING_PROTECTION_BONUS;
+        return protectionScore;
+    }
+
+    private int evaluatePieceCoordination(Board board, PlayerType player) {
+        int coordinationScore = 0;
+        List<int[]> piecePositions = new ArrayList<>();
+        
+        for (int r = 0; r < Board.ROWS; r++) {
+            for (int c = 0; c < Board.COLS; c++) {
+                Piece piece = board.getPiece(r, c);
+                if (piece != null && piece.getOwner() == player) {
+                    piecePositions.add(new int[]{r, c});
+                }
+            }
+        }
+        
+        for (int i = 0; i < piecePositions.size(); i++) {
+            for (int j = i + 1; j < piecePositions.size(); j++) {
+                int[] pos1 = piecePositions.get(i);
+                int[] pos2 = piecePositions.get(j);
+                int distance = Math.abs(pos1[0] - pos2[0]) + Math.abs(pos1[1] - pos2[1]);
+                
+                if (distance <= 2) {
+                    coordinationScore += PIECE_COORDINATION_BONUS;
+                }
+            }
+        }
+        
+        return coordinationScore;
+    }
+
+    private int evaluateOpponentTryThreat(Board board, PlayerType player, PlayerType opponent) {
+        int[] opponentLionPos = findLionPosition(board, opponent);
+        if (opponentLionPos == null) return 0;
+        
+        int threatScore = 0;
+        int homeRow = getTryRow(player);
+        
+        int distance = Math.abs(opponentLionPos[0] - homeRow);
+        threatScore += (3 - distance) * OPPONENT_TRY_THREAT / 3;
+        
+        if (opponentLionPos[0] == homeRow) {
+            threatScore += OPPONENT_TRY_THREAT * 2;
+        }
+        
+        return threatScore;
+    }
+
+    private int evaluateOpponentMobility(Board board, PlayerType opponent) {
+        int opponentMobility = 0;
+        for (int r = 0; r < Board.ROWS; r++) {
+            for (int c = 0; c < Board.COLS; c++) {
+                Piece piece = board.getPiece(r, c);
+                if (piece != null && piece.getOwner() == opponent) {
+                    opponentMobility += piece.getPossibleMoves(r, c, board).size();
+                }
+            }
+        }
+        return -opponentMobility * OPPONENT_MOBILITY_PENALTY;
+    }
+
+    private int[] findLionPosition(Board board, PlayerType player) {
+        for (int r = 0; r < Board.ROWS; r++) {
+            for (int c = 0; c < Board.COLS; c++) {
+                Piece piece = board.getPiece(r, c);
+                if (piece instanceof Lion && piece.getOwner() == player) {
+                    return new int[]{r, c};
+                }
+            }
+        }
+        return null;
+    }
+
+    private boolean isUnderAttack(Board board, int row, int col, PlayerType owner) {
+        PlayerType opponent = getOpponentPlayer(owner);
+        for (int r = 0; r < Board.ROWS; r++) {
+            for (int c = 0; c < Board.COLS; c++) {
+                Piece piece = board.getPiece(r, c);
+                if (piece != null && piece.getOwner() == opponent) {
+                    for (int[] move : piece.getPossibleMoves(r, c, board)) {
+                        if (move[0] == row && move[1] == col) return true;
+                    }
+                }
+            }
+        }
+        return false;
+    }
+
+    private boolean isLion(Piece piece) { 
+        return piece.getSymbol().matches("獅|ラ"); 
+    }
+    
+    private boolean isElephant(Piece piece) { 
+        return piece.getSymbol().matches("象|ゾ"); 
+    }
+    
+    private boolean isGiraffe(Piece piece) { 
+        return piece.getSymbol().matches("麒|キ"); 
+    }
+    
+    private boolean isChick(Piece piece) { 
+        return piece.getSymbol().matches("ひ|ヒ") && !piece.isPromoted(); 
+    }
+    
+    private boolean isHen(Piece piece) { 
+        return piece.getSymbol().matches("ニ|鶏") || 
+              (piece.getSymbol().matches("ひ|ヒ") && piece.isPromoted()); 
+    }
+
+    private boolean isCaptureMove(Game game, int[] move) {
+        Board board = game.getBoard();
+        Piece target = board.getPiece(move[2], move[3]);
+        return target != null && target.getOwner() != getPlayerType();
+    }
+
+    private int getPieceValue(Piece piece) {
+        if (isLion(piece)) return LION_VALUE;
+        if (isElephant(piece)) return ELEPHANT_VALUE;
+        if (isGiraffe(piece)) return GIRAFFE_VALUE;
+        if (isChick(piece)) return CHICK_VALUE;
+        if (isHen(piece)) return HEN_VALUE;
+        return 0;
+    }
+
+    private List<int[]> getAllPossibleMoves(Game game) {
+        List<int[]> moves = new ArrayList<>();
+        Board board = game.getBoard();
+        PlayerType current = getPlayerType();
+        
+        for (int r = 0; r < Board.ROWS; r++) {
+            for (int c = 0; c < Board.COLS; c++) {
+                Piece piece = board.getPiece(r, c);
+                if (piece != null && piece.getOwner() == current) {
+                    for (int[] move : piece.getPossibleMoves(r, c, board)) {
+                        moves.add(new int[]{r, c, move[0], move[1]});
+                    }
+                }
+            }
+        }
+        
+        List<Piece> captured = getCapturedPieces();
+        for (int i = 0; i < captured.size(); i++) {
+            Piece piece = captured.get(i);
+            for (int r = 0; r < Board.ROWS; r++) {
+                for (int c = 0; c < Board.COLS; c++) {
+                    if (board.isEmpty(r, c)) {
+                        moves.add(new int[]{-1, i, r, c});
+                    }
+                }
+            }
+        }
+        
+        return moves;
+    }
+
+    private void applyMove(Game game, int[] move) {
+        if (move == null) return;
+        
+        if (move[0] == -1) {
+            game.performDrop(getCapturedPieces().get(move[1]), move[2], move[3]);
+        } else {
+            game.performMove(move[0], move[1], move[2], move[3]);
+        }
+    }
+
+    private PlayerType getOpponentPlayer(PlayerType player) {
+        return player == PlayerType.PLAYER1 ? PlayerType.PLAYER2 : PlayerType.PLAYER1;
+    }
+
     private void addToTabuList(int[] move) {
+        if (move == null) return;
+        
         tabuList.addLast(move.clone());
         if (tabuList.size() > TABU_LIST_SIZE) {
             tabuList.removeFirst();
@@ -88,34 +762,8 @@ public class AlphaBeta extends Player {
     }
 
     private boolean isTabuMove(int[] move) {
+        if (move == null) return false;
         return tabuList.stream().anyMatch(m -> Arrays.equals(m, move));
-    }
-
-    private int evaluateMove(Game game, int[] move) {
-        int score = 0;
-        Board board = game.getBoard();
-        
-        // 駒取り評価
-        if (isCaptureMove(game, move)) {
-            Piece target = board.getPiece(move[2], move[3]);
-            Piece attacker = board.getPiece(move[0], move[1]);
-
-            int targetValue = getPieceValue(target);
-            int attackerValue = getPieceValue(attacker);
-
-            int tradeGain = targetValue - attackerValue;
-            score += tradeGain;
-
-            if (!isUnderAttack(board, move[2], move[3], getPlayerType())) {
-                score += CAPTURE_BONUS;
-            }
-        }
-        
-        // ライオン関連評価
-        if (move[0] != -1 && isLion(board.getPiece(move[2], move[3]))) {
-            score += evaluateLionSafety(board, move[2], move[3], getPlayerType());
-        }
-        return score;
     }
 
     private int evaluateLionSafety(Board board, int row, int col, PlayerType player) {
@@ -155,122 +803,5 @@ public class AlphaBeta extends Player {
             }
             return minEval;
         }
-    }
-
-    private int evaluateBoard(Board board, boolean isMaximizingPlayer) {
-        PlayerType player = isMaximizingPlayer ? getPlayerType() : getOpponentPlayer(getPlayerType());
-        int score = 0;
-        
-        // 駒の価値合計
-        for (int r = 0; r < Board.ROWS; r++) {
-            for (int c = 0; c < Board.COLS; c++) {
-                Piece piece = board.getPiece(r, c);
-                if (piece != null) {
-                    score += (piece.getOwner() == player) ? getPieceValue(piece) : -getPieceValue(piece);
-                }
-            }
-        }
-        
-        // ライオン安全性チェック
-        int[] lionPos = findLionPosition(board, player);
-        if (lionPos != null) {
-            score += evaluateLionSafety(board, lionPos[0], lionPos[1], player);
-        }
-        
-        return score;
-    }
-
-    // 以下はヘルパーメソッド（変更なし）
-    private boolean isUnderAttack(Board board, int row, int col, PlayerType owner) {
-        PlayerType opponent = getOpponentPlayer(owner);
-        for (int r = 0; r < Board.ROWS; r++) {
-            for (int c = 0; c < Board.COLS; c++) {
-                Piece piece = board.getPiece(r, c);
-                if (piece != null && piece.getOwner() == opponent) {
-                    for (int[] move : piece.getPossibleMoves(r, c, board)) {
-                        if (move[0] == row && move[1] == col) return true;
-                    }
-                }
-            }
-        }
-        return false;
-    }
-
-    private int[] findLionPosition(Board board, PlayerType player) {
-        for (int r = 0; r < Board.ROWS; r++) {
-            for (int c = 0; c < Board.COLS; c++) {
-                Piece piece = board.getPiece(r, c);
-                if (piece != null && isLion(piece) && piece.getOwner() == player) {
-                    return new int[]{r, c};
-                }
-            }
-        }
-        return null;
-    }
-
-    private boolean isLion(Piece piece) { return piece.getSymbol().matches("獅|ラ"); }
-    private boolean isElephant(Piece piece) { return piece.getSymbol().matches("象|ゾ"); }
-    private boolean isGiraffe(Piece piece) { return piece.getSymbol().matches("麒|キ"); }
-    private boolean isChick(Piece piece) { return piece.getSymbol().matches("ひ|ヒ") && !piece.isPromoted(); }
-    private boolean isHen(Piece piece) { return piece.getSymbol().matches("ニ|鶏") || (piece.getSymbol().matches("ひ|ヒ") && piece.isPromoted()); }
-
-    private boolean isCaptureMove(Game game, int[] move) {
-        Board board = game.getBoard();
-        Piece target = board.getPiece(move[2], move[3]);
-        return target != null && target.getOwner() != getPlayerType();
-    }
-
-    private int getPieceValue(Piece piece) {
-        if (isLion(piece)) return LION_VALUE;
-        if (isElephant(piece)) return ELEPHANT_VALUE;
-        if (isGiraffe(piece)) return GIRAFFE_VALUE;
-        if (isChick(piece)) return CHICK_VALUE;
-        if (isHen(piece)) return HEN_VALUE;
-        return 0;
-    }
-
-    private List<int[]> getAllPossibleMoves(Game game) {
-        List<int[]> moves = new ArrayList<>();
-        Board board = game.getBoard();
-        PlayerType current = getPlayerType();
-        
-        // 盤上の駒の移動
-        for (int r = 0; r < Board.ROWS; r++) {
-            for (int c = 0; c < Board.COLS; c++) {
-                Piece piece = board.getPiece(r, c);
-                if (piece != null && piece.getOwner() == current) {
-                    for (int[] move : piece.getPossibleMoves(r, c, board)) {
-                        moves.add(new int[]{r, c, move[0], move[1]});
-                    }
-                }
-            }
-        }
-        
-        // 手駒を打つ手
-        List<Piece> captured = getCapturedPieces();
-        for (int i = 0; i < captured.size(); i++) {
-            Piece piece = captured.get(i);
-            for (int r = 0; r < Board.ROWS; r++) {
-                for (int c = 0; c < Board.COLS; c++) {
-                    if (board.isEmpty(r, c)) {
-                        moves.add(new int[]{-1, i, r, c});
-                    }
-                }
-            }
-        }
-        
-        return moves;
-    }
-
-    private void applyMove(Game game, int[] move) {
-        if (move[0] == -1) {
-            game.performDrop(getCapturedPieces().get(move[1]), move[2], move[3]);
-        } else {
-            game.performMove(move[0], move[1], move[2], move[3]);
-        }
-    }
-
-    private PlayerType getOpponentPlayer(PlayerType player) {
-        return player == PlayerType.PLAYER1 ? PlayerType.PLAYER2 : PlayerType.PLAYER1;
     }
 }
