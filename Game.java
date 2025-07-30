@@ -275,7 +275,7 @@ public class Game implements Cloneable {
         int[] move = null;
 
         // 最初の2ターン（各プレイヤーの最初の1手）のみ、ライオンを除外したランダムな手を指す
-        if (turnNumber <= 2) {
+        if (turnNumber <= 4) {
             move = getRandomLegalMove(currentPlayer);
             if (move == null) {
                 printIfNotSilent("ランダムな合法手を見つけられませんでした。AIが詰んだ可能性があります。");
@@ -875,6 +875,7 @@ public class Game implements Cloneable {
                 draws++; // 最大ターン数超過または千日手による引き分け
             }
         }
+        
 
         System.out.println("--- シミュレーション結果 ---");
         System.out.println("PlayerAの勝利数: " + player1Wins);
