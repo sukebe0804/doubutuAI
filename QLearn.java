@@ -1,3 +1,8 @@
+import java.io.FileOutputStream;
+import java.io.FileInputStream;
+import java.io.ObjectOutputStream;
+import java.io.ObjectInputStream;
+import java.io.IOException;
 import java.util.*;
 
 public class QLearn extends Player {
@@ -280,6 +285,30 @@ public class QLearn extends Player {
             }
         }
         return safety;
+    }
+
+    public void saveQTable(String filename) {
+    try (ObjectOutputStream oos = new ObjectOutputStream(new FileOutputStream(filename))) {
+        oos.writeObject(qTable);  // qTableはMap<String, Map<String, Double>>
+	setEpsilon(0.0);
+        System.out.println("Qテーブルを保存しました。");
+    } catch (IOException e) {
+        e.printStackTrace();
+    }
+}
+
+    @SuppressWarnings("unchecked")
+    public void loadQTable(String filename) {
+    try (ObjectInputStream ois = new ObjectInputStream(new FileInputStream(filename))) {
+	qTable = (Map<String, Map<Integer, Double>>) ois.readObject();
+        System.out.println("Qテーブルを読み込みました。");
+    } catch (IOException | ClassNotFoundException e) {
+        e.printStackTrace();
+    }
+}
+
+    private void setEpsilon(double epsilon) {
+	this.EPSILON = epsilon;
     }
 
     @Override
