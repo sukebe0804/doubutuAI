@@ -1,7 +1,9 @@
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Scanner;
-import java.util.Random; // 追加
+import java.util.Random;
+import java.util.HashMap; // 追加
+import java.util.Map;     // 追加
 
 public class Game implements Cloneable {
     private Board board;
@@ -9,7 +11,9 @@ public class Game implements Cloneable {
     private boolean silentMode = false; // サイレントモードフラグ
     private Player currentPlayer;
     private PlayerType forcedWinner = null;
-    private int turnNumber;
+    private int turnNumber; // ターン数カウンター
+    private Map<String, Integer> positionHistory; // ★追加：局面の履歴
+    private static final int SENTE_NICHI_TE = 4; // ★追加：千日手判定の回数
 
     // PlayerAの指定
     // private RandomPlayer PlayerA; // ランダムプレイヤー
@@ -46,7 +50,6 @@ public class Game implements Cloneable {
     public Game() {
         board = new Board();
         scanner = new Scanner(System.in);
-        turnNumber = 0;
 
         // this.PlayerA = new RandomPlayer("RandomPlayer");
         // this.PlayerA = new HumanPlayer("Human");
@@ -73,6 +76,8 @@ public class Game implements Cloneable {
 
         currentPlayer = this.PlayerA; // PlayerA, or Bどちらを先手にするかはここで指定する.
         initializeGame();
+        this.turnNumber = 0; // ターン数カウンターの初期化
+        this.positionHistory = new HashMap<>(); // ★追加：局面履歴の初期化
     }
 
     // ----------------------------ここから追加（加藤）------------------------
@@ -82,11 +87,11 @@ public class Game implements Cloneable {
         // this.PlayerA = new HumanPlayer("Human");
 
         // ----------------------------- 変更点その4 -----------------------------
-	    // this.PlayerA = new MinMax("MinMax"); // 西岡
+        // this.PlayerA = new MinMax("MinMax"); // 西岡
         this.PlayerA = trialedQLearn; // 加藤
-	
-	    this.PlayerB = new MinMax("MinMax"); // 西岡
-	    // this.PlayerB = new AlphaBeta("AlphaBata"); // 宮田
+    
+        this.PlayerB = new MinMax("MinMax"); // 西岡
+        // this.PlayerB = new AlphaBeta("AlphaBata"); // 宮田
 
         // -----------------------------------------------------------------------
 
@@ -98,6 +103,8 @@ public class Game implements Cloneable {
 
         currentPlayer = this.PlayerA; // PlayerA, or Bどちらを先手にするかはここで指定する.
         initializeGame();
+        this.turnNumber = 0; // ターン数カウンターの初期化
+        this.positionHistory = new HashMap<>(); // ★追加：局面履歴の初期化
     }
     //---------------------------ここまで-------------------------------
 
@@ -115,51 +122,6 @@ public class Game implements Cloneable {
         board.placePiece(new Hiyoko(PlayerType.PLAYER2), 2, 1);
     }
 
-    private int[] getRandomLegalMove(Player player) {
-        List<int[]> legalMoves = new ArrayList<>();
-
-        // 駒の移動による合法手の収集
-        for (int r = 0; r < Board.ROWS; r++) {
-            for (int c = 0; c < Board.COLS; c++) {
-                Piece piece = board.getPiece(r, c);
-                if (piece != null && piece.getOwner() == player.getPlayerType()) {
-                    List<int[]> possiblePieceMoves = piece.getPossibleMoves(r, c, board);
-                    for (int[] toCoord : possiblePieceMoves) {
-                        // この移動が王手にならないかチェック
-                        if (isValidMoveAndNotIntoCheck(player.getPlayerType(), r, c, toCoord[0], toCoord[1])) {
-                            legalMoves.add(new int[]{r, c, toCoord[0], toCoord[1]});
-                        }
-                    }
-                }
-            }
-        }
-
-        // 手駒を打つ合法手の収集
-        for (int i = 0; i < player.getCapturedPieces().size(); i++) {
-            Piece capturedPiece = player.getCapturedPieces().get(i);
-            for (int r = 0; r < Board.ROWS; r++) {
-                for (int c = 0; c < Board.COLS; c++) {
-                    if (board.isEmpty(r, c)) {
-                        // この打ち手が王手にならないかチェック
-                        if (isValidDropAndNotIntoCheck(player.getPlayerType(), capturedPiece, r, c)) {
-                            // ドロップの場合のフォーマット: {-1, 手駒インデックス, dropRow, dropCol}
-                            legalMoves.add(new int[]{-1, i, r, c});
-                        }
-                    }
-                }
-            }
-        }
-
-        if (legalMoves.isEmpty()) {
-            return null; // 合法手がない
-        }
-
-        // ランダムに1つ選択
-        Random rand = new Random();
-        return legalMoves.get(rand.nextInt(legalMoves.size()));
-    }
-
-
     public void startGame() {
         // 勝者を示すフィールドを追加
         PlayerType winner = null;
@@ -170,7 +132,7 @@ public class Game implements Cloneable {
 
             System.out.println("--- " + currentPlayer.getName() + "の番です ---");
 
-            turnNumber++;
+            this.turnNumber++; // ターン数をインクリメント
 
             if (currentPlayer instanceof HumanPlayer) {
                 handleHumanTurn();
@@ -185,6 +147,14 @@ public class Game implements Cloneable {
                 break; // 勝者が決定したらループを抜ける
             }
             
+            // ★追加：千日手チェックをここに追加
+            // 手番を切り替える前に、現在の局面が千日手になっていないかを確認する
+            if (checkSennichite()) {
+                printIfNotSilent("千日手により引き分け！"); // サイレントモードの場合は表示されない
+                winner = null; // 引き分けを示す
+                break; 
+            }
+
             switchPlayer(); // 勝者がいない場合のみプレイヤーを切り替える
         }
         
@@ -193,6 +163,8 @@ public class Game implements Cloneable {
             System.out.println("PlayerAの勝利！");
         } else if (winner == PlayerType.PLAYER2) {
             System.out.println("PlayerBの勝利！");
+        } else { // winner が null の場合（引き分け）
+            System.out.println("--- ゲームは引き分けです ---");
         }
         System.out.println("--- ゲーム終了 ---");
         scanner.close();
@@ -300,26 +272,22 @@ public class Game implements Cloneable {
         // AIに手を選ばせる（移動と打つ手を含む）
         // 現在のプレイヤー（currentPlayer）のchooseMoveメソッドを呼び出す
         printIfNotSilent("AI is thinking...");
-        int[] move = currentPlayer.chooseMove(this); // ここを修正
+        int[] move = null;
 
-        // 最初のターンであればランダムな手を選ぶ
-        if (turnNumber == 1) { // プレイヤーAの1手目、またはプレイヤーBの1手目（ゲーム全体で1手目か2手目）
-            // 現在のプレイヤーがPlayerAかPlayerBかによって、それぞれのランダム手を生成
-            // Playerクラスにランダムな合法手を生成するメソッドを追加するか、
-            // Gameクラス内でランダムな手を生成するロジックを実装する
+        // 最初の2ターン（各プレイヤーの最初の1手）のみ、ライオンを除外したランダムな手を指す
+        if (turnNumber <= 2) {
             move = getRandomLegalMove(currentPlayer);
             if (move == null) {
                 printIfNotSilent("ランダムな合法手を見つけられませんでした。AIが詰んだ可能性があります。");
-                // 合法手が見つからなかったプレイヤーの負けにする
                 if (currentPlayer.getPlayerType() == PlayerType.PLAYER1) {
-                    this.forcedWinner = PlayerType.PLAYER2; // Player1が合法手なし → Player2の勝ち
+                    this.forcedWinner = PlayerType.PLAYER2;
                 } else {
-                    this.forcedWinner = PlayerType.PLAYER1; // Player2が合法手なし → Player1の勝ち
+                    this.forcedWinner = PlayerType.PLAYER1;
                 }
                 return;
             }
         } else {
-            // 2ターン目以降は通常のAIロジックで手を選ぶ
+            // 3ターン目以降は通常のAIロジックで手を選ぶ
             move = currentPlayer.chooseMove(this);
         }
 
@@ -329,7 +297,11 @@ public class Game implements Cloneable {
             if (move[0] == -1) { // 手駒を打つ手
                 // chooseMove内で合法性チェック済みのため、ここではそのまま実行
                 // currentPlayerの手駒リストから駒を取得
-                Piece pieceToDrop = currentPlayer.getCapturedPieces().get(move[1]); // ここを修正
+                // move[1]はcapturedPiecesリストのインデックス
+                // ※注意: QLearnのchooseMoveで直接Pieceオブジェクトを渡している場合、
+                // ここでcapturedPieces.get(move[1])が正しいか確認してください。
+                // getRandomLegalMoveではcapturedPiecesのインデックスを渡しているので問題ありません。
+                Piece pieceToDrop = currentPlayer.getCapturedPieces().get(move[1]);
                 System.out.println(currentPlayer.getName() + "は「" + pieceToDrop.getSymbol() + "」を " + move[2] + "," + move[3] + " に打ちます！");
                 performDrop(pieceToDrop, move[2], move[3]);
             } else { // 駒の移動
@@ -350,6 +322,60 @@ public class Game implements Cloneable {
             // メソッドを終了
             return; 
         }
+    }
+
+    // ランダムな合法手を取得するメソッド
+    private int[] getRandomLegalMove(Player player) {
+        List<int[]> legalMoves = new ArrayList<>();
+
+        // 駒の移動による合法手の収集
+        for (int r = 0; r < Board.ROWS; r++) {
+            for (int c = 0; c < Board.COLS; c++) {
+                Piece piece = board.getPiece(r, c);
+                if (piece != null && piece.getOwner() == player.getPlayerType()) {
+                    // ★修正：ターン数が1または2（初手）の場合、かつ駒がライオンの場合はスキップ
+                    if (turnNumber <= 2 && piece instanceof Lion) {
+                        continue; // ライオンの移動は除外
+                    }
+
+                    List<int[]> possiblePieceMoves = piece.getPossibleMoves(r, c, board);
+                    for (int[] toCoord : possiblePieceMoves) {
+                        // この移動が王手にならないかチェック
+                        // クローンしたゲームでシミュレーションし、王手にならないことを確認
+                        if (isValidMoveAndNotIntoCheck(player.getPlayerType(), r, c, toCoord[0], toCoord[1])) {
+                            // 移動: {fromRow, fromCol, toRow, toCol}
+                            legalMoves.add(new int[]{r, c, toCoord[0], toCoord[1]});
+                        }
+                    }
+                }
+            }
+        }
+
+        // 手駒を打つ合法手の収集
+        // ※手駒にはライオンはないので、ここでの特別な除外処理は不要
+        for (int i = 0; i < player.getCapturedPieces().size(); i++) {
+            Piece capturedPiece = player.getCapturedPieces().get(i);
+            for (int r = 0; r < Board.ROWS; r++) {
+                for (int c = 0; c < Board.COLS; c++) {
+                    // 盤面が空いており、かつその打ち手が王手にならないかチェック
+                    if (board.isEmpty(r, c)) {
+                        // クローンしたゲームでシミュレーションし、王手にならないことを確認
+                        if (isValidDropAndNotIntoCheck(player.getPlayerType(), capturedPiece, r, c)) {
+                            // ドロップ: {-1, 手駒インデックス, dropRow, dropCol}
+                            legalMoves.add(new int[]{-1, i, r, c});
+                        }
+                    }
+                }
+            }
+        }
+
+        if (legalMoves.isEmpty()) {
+            return null; // 合法手がない
+        }
+
+        // ランダムに1つ選択
+        Random rand = new Random();
+        return legalMoves.get(rand.nextInt(legalMoves.size()));
     }
 
     // 駒を動かす処理
@@ -691,6 +717,53 @@ public class Game implements Cloneable {
         }
     }
 
+    // ★追加：局面を文字列化するヘルパーメソッド
+    private String getCurrentBoardState() {
+        StringBuilder sb = new StringBuilder();
+        for (int r = 0; r < Board.ROWS; r++) {
+            for (int c = 0; c < Board.COLS; c++) {
+                Piece piece = board.getPiece(r, c);
+                if (piece == null) {
+                    sb.append("NN"); // No Piece
+                } else {
+                    sb.append(piece.getSymbol()); // 例: 'L1', 'H2'など
+                    sb.append(piece.getOwner() == PlayerType.PLAYER1 ? "1" : "2");
+                    sb.append(piece.isPromoted() ? "P" : "U"); // Promoted or Unpromoted
+                }
+            }
+        }
+        // 手駒の情報も局面の一部として含める (順序を固定することで一意性を保証)
+        List<Piece> p1Captured = new ArrayList<>(PlayerA.getCapturedPieces());
+        List<Piece> p2Captured = new ArrayList<>(PlayerB.getCapturedPieces());
+        p1Captured.sort((p1, p2) -> p1.getSymbol().compareTo(p2.getSymbol()));
+        p2Captured.sort((p1, p2) -> p1.getSymbol().compareTo(p2.getSymbol()));
+
+        sb.append("A手駒:");
+        p1Captured.forEach(p -> sb.append(p.getSymbol()).append(p.getOwner() == PlayerType.PLAYER1 ? "1" : "2").append(p.isPromoted() ? "P" : "U"));
+        sb.append("B手駒:");
+        p2Captured.forEach(p -> sb.append(p.getSymbol()).append(p.getOwner() == PlayerType.PLAYER1 ? "1" : "2").append(p.isPromoted() ? "P" : "U"));
+        
+        // 現在のプレイヤーも局面の一部に含める (手番も考慮するため)
+        sb.append("Turn:");
+        sb.append(currentPlayer.getPlayerType() == PlayerType.PLAYER1 ? "1" : "2");
+
+        return sb.toString();
+    }
+
+    // ★追加：千日手チェックメソッド
+    public boolean checkSennichite() {
+        String currentState = getCurrentBoardState();
+        positionHistory.put(currentState, positionHistory.getOrDefault(currentState, 0) + 1);
+        
+        // // 千日手判定のログ (デバッグ用)
+        // if (!silentMode) {
+        //     System.out.println("局面ハッシュ: " + currentState.hashCode() + " -> 出現回数: " + positionHistory.get(currentState));
+        // }
+
+        return positionHistory.get(currentState) >= SENTE_NICHI_TE;
+    }
+
+
     // クローン実装
     @Override
     public Game clone() {
@@ -701,12 +774,9 @@ public class Game implements Cloneable {
             
             // Playerインスタンスもディープコピー
             // PlayerAとPlayerBの型に基づいてクローンを作成
-            // PlayerAはRandomPlayerとして宣言されているため、RandomPlayerとしてクローン
-            // clonedGame.PlayerA = (RandomPlayer) this.PlayerA.clone();
-
             // clonedGame.PlayerA = (MinMax) this.PlayerA.clone(); // 西岡
-            // clonedGame.PlayerA = (AlphaBeta) this.PlayerA.clone(); // 宮田
             clonedGame.PlayerA = (QLearn) this.PlayerA.clone(); // 加藤
+            // clonedGame.PlayerA = (AlphaBeta) this.PlayerA.clone(); // 宮田
 
             // ------------------------------------------------------------------
 
@@ -732,7 +802,8 @@ public class Game implements Cloneable {
             clonedGame.trialPlayer = this.trialPlayer;
             clonedGame.trialRow = this.trialRow;
             clonedGame.trialCol = this.trialCol;
-
+            clonedGame.turnNumber = this.turnNumber; // ターン数もコピー
+            clonedGame.positionHistory = new HashMap<>(this.positionHistory); // ★追加：局面履歴もコピー
 
             return clonedGame;
         } catch (CloneNotSupportedException e) {
@@ -782,9 +853,15 @@ public class Game implements Cloneable {
             final int MAX_TURNS = 100; // 最大ターン数。これを超えたら引き分けと見なす
 
             while (winner == null && turnCount < MAX_TURNS) {
+                game.turnNumber = turnCount + 1; // シミュレーション中のturnNumberも更新
                 game.handleCpuTurn();
                 winner = game.isGameOver();
                 if (winner == null) { // 勝者がまだ決まっていない場合のみプレイヤーを切り替える
+                    // ★追加：シミュレーション中も千日手チェック
+                    if (game.checkSennichite()) {
+                        winner = null; // 引き分け
+                        break;
+                    }
                     game.switchPlayer();
                 }
                 turnCount++;
@@ -795,7 +872,7 @@ public class Game implements Cloneable {
             } else if (winner == PlayerType.PLAYER2) {
                 player2Wins++;
             } else {
-                draws++; // 最大ターン数を超過した場合は引き分け
+                draws++; // 最大ターン数超過または千日手による引き分け
             }
         }
 
@@ -809,47 +886,53 @@ public class Game implements Cloneable {
 
     //  ---------------------ここから新メソッドを追加(加藤)------------------------
     public static void QLrunSimulations(int numGames, QLearn trialedQLearn) {
-	int player1Wins = 0;
-	int player2Wins = 0;
-	int draws = 0; // 引き分けをカウント
+    int player1Wins = 0;
+    int player2Wins = 0;
+    int draws = 0; // 引き分けをカウント
 
-	System.out.println("--- シミュレーション開始 (全 " + numGames + " ゲーム) ---");
+    System.out.println("--- シミュレーション開始 (全 " + numGames + " ゲーム) ---");
 
-	for (int i = 0; i < numGames; i++) {
-	    System.out.println("ゲーム " + (i + 1) + " / " + numGames);
-	    Game game = new Game(trialedQLearn);
-	    game.setSilentMode(true); // シミュレーション中はサイレントモードを有効にする
+    for (int i = 0; i < numGames; i++) {
+        System.out.println("ゲーム " + (i + 1) + " / " + numGames);
+        Game game = new Game(trialedQLearn);
+        game.setSilentMode(true); // シミュレーション中はサイレントモードを有効にする
             
-	    PlayerType winner = null;
+        PlayerType winner = null;
             // 盤面の状態が同じ手数が連続した場合、引き分けと判定するためのカウンタ
-	    // ここでは簡易的に、ゲームが進行しない場合の無限ループを避けるための一時的な対策として、
+        // ここでは簡易的に、ゲームが進行しない場合の無限ループを避けるための一時的な対策として、
             // 一定のターン数を超えたら引き分けと見なす
-	    int turnCount = 0;
+        int turnCount = 0;
             final int MAX_TURNS = 500; // 最大ターン数。これを超えたら引き分けと見なす
 
             while (winner == null && turnCount < MAX_TURNS) {
-        	game.handleCpuTurn();
-        	winner = game.isGameOver();
-        	if (winner == null) { // 勝者がまだ決まっていない場合のみプレイヤーを切り替える
-        	    game.switchPlayer();
-        	}
-        	turnCount++;
+            game.turnNumber = turnCount + 1; // シミュレーション中のturnNumberも更新
+            game.handleCpuTurn();
+            winner = game.isGameOver();
+            if (winner == null) { // 勝者がまだ決まっていない場合のみプレイヤーを切り替える
+                // ★追加：シミュレーション中も千日手チェック
+                if (game.checkSennichite()) {
+                    winner = null; // 引き分け
+                    break;
+                }
+                game.switchPlayer();
+            }
+            turnCount++;
             }
 
             if (winner == PlayerType.PLAYER1) {
-        	player1Wins++;
+            player1Wins++;
             } else if (winner == PlayerType.PLAYER2) {
-        	player2Wins++;
+            player2Wins++;
             } else {
-        	draws++; // 最大ターン数を超過した場合は引き分け
+            draws++; // 最大ターン数超過または千日手による引き分け
             }
         }
 
-	System.out.println("--- シミュレーション結果 ---");
-	System.out.println("PlayerA (QLearn) の勝利数: " + player1Wins);
-	System.out.println("PlayerB (AlphaBeta) の勝利数: " + player2Wins);
-	System.out.println("引き分け数: " + draws);
-	System.out.println("--- シミュレーション終了 ---");
+    System.out.println("--- シミュレーション結果 ---");
+    System.out.println("PlayerA (QLearn) の勝利数: " + player1Wins);
+    System.out.println("PlayerB (AlphaBeta) の勝利数: " + player2Wins);
+    System.out.println("引き分け数: " + draws);
+    System.out.println("--- シミュレーション終了 ---");
     }
     //  ---------------------ここまで新メソッドを追加(加藤)------------------------
 }
