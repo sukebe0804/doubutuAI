@@ -15,85 +15,20 @@ public class Game implements Cloneable {
     private Map<String, Integer> positionHistory; // ★追加：局面の履歴
     private static final int SENTE_NICHI_TE = 4; // ★追加：千日手判定の回数
 
-    // PlayerAの指定
-    // private RandomPlayer PlayerA; // ランダムプレイヤー
-    // private HumanPlayer PlayerA;
-
-    // private MinMax PlayerA; // 西岡
-    private QLearn PlayerA; // 加藤
-    // private AlphaBeta PlayerA; // 宮田
-
-    // -----------------------------------------------------------------------
-
-    // AIごとの変更点その1
-    // 自分で作成した(AIname).javaのクラスのインスタンスをGame.javaで宣言.
-    // 対戦時に使用するAIを切り替えるのに使用.
-    // 作成者名をコードの隣に記述してほしい!
-    // とりあえず今はRandomPlayerをPlayerAにしてるからPlayerBのとこに各自でかいとってー
-
-    // PlayerBの指定
-    // 例: 西岡の作成したAI(MinMax.java)の場合、以下のように記述する.
-    // private 変数のデータ型 変数(ここはPlayerB固定)
-
-    // private QLearn PlayerB; // 加藤
-    private MinMax PlayerB; // 西岡
-    // private AlphaBeta PlayerB; //宮田
-
-    // -----------------------------------------------------------------------
-
-
+    private Player PlayerA; // 変更:強制プレイヤー型
+    private Player PlayerB; // 変更:同様
+    
     // トライルール関連のフィールド
     private PlayerType trialPlayer = null; // トライしたプレイヤーのタイプを保持
     private int trialRow = -1;             // トライしたライオンの行座標
     private int trialCol = -1;             // トライしたライオンの列座標
     
-    public Game() {
-        board = new Board();
-        scanner = new Scanner(System.in);
-
-        // this.PlayerA = new RandomPlayer("RandomPlayer");
-        // this.PlayerA = new HumanPlayer("Human");
-        // this.PlayerA = new MinMax("MinMax"); // 西岡
-        this.PlayerA = new QLearn("QLearn"); // 加藤
-        // this.PlayerA = new AlphaBeta("AlphaBeta"); // 宮田
-
-        // -----------------------------------------------------------------------
-
-        // AIごとの変更点その2
-        // 例: 西岡の作成したAI(MinMax.java)の場合、以下のように記述する.
-        // this.PlayerB = new 変数の型("作成したAIの名前")
-        // this.PlayerB = new QLearn("QLearn"); // 加藤
-        this.PlayerB = new MinMax("MinMax"); // 西岡
-        // this.PlayerB = new AlphaBeta("AlphaBeta"); // 宮田
-
-        // -----------------------------------------------------------------------
-
-        System.out.println("PlayerA: " + PlayerA);
-        System.out.println("PlayerB: " + PlayerB);
-
-        PlayerA.setPlayerType(PlayerType.PLAYER1);
-        PlayerB.setPlayerType(PlayerType.PLAYER2);
-
-        currentPlayer = this.PlayerA; // PlayerA, or Bどちらを先手にするかはここで指定する.
-        initializeGame();
-        this.turnNumber = 0; // ターン数カウンターの初期化
-        this.positionHistory = new HashMap<>(); // ★追加：局面履歴の初期化
-    }
-
-    // ----------------------------ここから追加（加藤）------------------------
-    public Game(QLearn trialedQLearn) {
-        board = new Board();
-        scanner = new Scanner(System.in);
-        // this.PlayerA = new HumanPlayer("Human");
-
-        // ----------------------------- 変更点その4 -----------------------------
-        // this.PlayerA = new MinMax("MinMax"); // 西岡
-        this.PlayerA = trialedQLearn; // 加藤
+    public Game() {}
     
-        this.PlayerB = new MinMax("MinMax"); // 西岡
-        // this.PlayerB = new AlphaBeta("AlphaBata"); // 宮田
-
-        // -----------------------------------------------------------------------
+    public Game(Player A, Player B) {
+        board = new Board();
+        scanner = new Scanner(System.in);
+	setPlayers(A, B); // 変更:セットメソットでPlayerA, Bを自動設定
 
         System.out.println("PlayerA: " + PlayerA);
         System.out.println("PlayerB: " + PlayerB);
@@ -106,8 +41,9 @@ public class Game implements Cloneable {
         this.turnNumber = 0; // ターン数カウンターの初期化
         this.positionHistory = new HashMap<>(); // ★追加：局面履歴の初期化
     }
-    //---------------------------ここまで-------------------------------
-
+    
+    // 削除:不要なコンストラクタ(OLearnでのMainで使用していたもの)
+    
     private void initializeGame() {
         // PLAYER1の駒
         board.placePiece(new Kirin(PlayerType.PLAYER1), 0, 0);
@@ -771,25 +707,10 @@ public class Game implements Cloneable {
             Game clonedGame = (Game) super.clone();
             clonedGame.board = this.board.clone(); // Boardのディープコピー
             clonedGame.scanner = new Scanner(System.in); // 新しいScannerを作成
-            
-            // Playerインスタンスもディープコピー
-            // PlayerAとPlayerBの型に基づいてクローンを作成
-            // clonedGame.PlayerA = (MinMax) this.PlayerA.clone(); // 西岡
-            clonedGame.PlayerA = (QLearn) this.PlayerA.clone(); // 加藤
-            // clonedGame.PlayerA = (AlphaBeta) this.PlayerA.clone(); // 宮田
+            // 変更:クローン作成も型参照メソット（後述）を使用し自動化
+	    clonedGame.PlayerA = this.castPlayer(PlayerA).clone(); 
+            clonedGame.PlayerB = this.castPlayer(PlayerB).clone();
 
-            // ------------------------------------------------------------------
-
-            // AIごとの変更点その3
-            // PlayerBはMinMaxとして宣言されているため、MinMaxとしてクローン
-            // 例: 西岡の作成したAI(MinMax.java)の場合、以下のように記述する.
-            // clonedGame.PlayerB = (変数の型) this.PlayerB.clone();
-
-            clonedGame.PlayerB = (MinMax) this.PlayerB.clone(); // 西岡
-            // clonedGame.PlayerB = (AlphaBeta) this.PlayerB.clone(); // 宮田
-            // clonedGame.PlayerB = (QLearn) this.PlayerB.clone(); // 加藤
-
-            // ------------------------------------------------------------------
             
             // currentPlayerの参照をクローンされたPlayerインスタンスに更新
             if (this.currentPlayer == this.PlayerA) {
@@ -833,7 +754,8 @@ public class Game implements Cloneable {
     }
 
     //  ---------------------ここから新メソッドを追加(西岡)------------------------
-    public static void runSimulations(int numGames) {
+    // 更新:引数の追加
+    public static void runSimulations(int numGames, Player A, Player B) {
         int player1Wins = 0;
         int player2Wins = 0;
         int draws = 0; // 引き分けをカウント
@@ -842,7 +764,7 @@ public class Game implements Cloneable {
 
         for (int i = 0; i < numGames; i++) {
             System.out.println("ゲーム " + (i + 1) + " / " + numGames);
-            Game game = new Game();
+            Game game = new Game(A, B); // 変更:コンストラクタに応じて変更
             game.setSilentMode(true); // シミュレーション中はサイレントモードを有効にする
             
             PlayerType winner = null;
@@ -886,54 +808,37 @@ public class Game implements Cloneable {
     //  ---------------------ここまで新メソッドを追加(西岡)------------------------
 
     //  ---------------------ここから新メソッドを追加(加藤)------------------------
-    public static void QLrunSimulations(int numGames, QLearn trialedQLearn) {
-    int player1Wins = 0;
-    int player2Wins = 0;
-    int draws = 0; // 引き分けをカウント
+    // 削除:使用しないメソットの削除
+    // 追加:相手のPlayerを返すメソッド
+    public Player getOpponent(Player player) {
+	return (player == PlayerA) ? PlayerB : PlayerA;
+    }
 
-    System.out.println("--- シミュレーション開始 (全 " + numGames + " ゲーム) ---");
+    // 追加:Playerをセットするメソッド
+    public void setPlayers(Player A, Player B) {
+	this.PlayerA = castPlayer(A);
+	this.PlayerB = castPlayer(B);
+    }
 
-    for (int i = 0; i < numGames; i++) {
-        System.out.println("ゲーム " + (i + 1) + " / " + numGames);
-        Game game = new Game(trialedQLearn);
-        game.setSilentMode(true); // シミュレーション中はサイレントモードを有効にする
-            
-        PlayerType winner = null;
-            // 盤面の状態が同じ手数が連続した場合、引き分けと判定するためのカウンタ
-        // ここでは簡易的に、ゲームが進行しない場合の無限ループを避けるための一時的な対策として、
-            // 一定のターン数を超えたら引き分けと見なす
-        int turnCount = 0;
-            final int MAX_TURNS = 500; // 最大ターン数。これを超えたら引き分けと見なす
-
-            while (winner == null && turnCount < MAX_TURNS) {
-            game.turnNumber = turnCount + 1; // シミュレーション中のturnNumberも更新
-            game.handleCpuTurn();
-            winner = game.isGameOver();
-            if (winner == null) { // 勝者がまだ決まっていない場合のみプレイヤーを切り替える
-                // ★追加：シミュレーション中も千日手チェック
-                if (game.checkSennichite()) {
-                    winner = null; // 引き分け
-                    break;
-                }
-                game.switchPlayer();
-            }
-            turnCount++;
-            }
-
-            if (winner == PlayerType.PLAYER1) {
-            player1Wins++;
-            } else if (winner == PlayerType.PLAYER2) {
-            player2Wins++;
-            } else {
-            draws++; // 最大ターン数超過または千日手による引き分け
-            }
-        }
-
-    System.out.println("--- シミュレーション結果 ---");
-    System.out.println("PlayerA (QLearn) の勝利数: " + player1Wins);
-    System.out.println("PlayerB (AlphaBeta) の勝利数: " + player2Wins);
-    System.out.println("引き分け数: " + draws);
-    System.out.println("--- シミュレーション終了 ---");
+    // 追加:Player内の型を参照するメソッド
+    private Player castPlayer(Player p) {
+	if (p instanceof QLearn) {
+	    return (QLearn) p;
+	} else if (p instanceof AlphaBeta) {
+	    return (AlphaBeta) p;
+	} else if (p instanceof MinMax) {
+	    return (MinMax) p;
+	    //} else if (p instanceof ABPlayer) { //栗政くんの入れたら外して
+	    //return (ABPlayer) p;
+	} else if (p instanceof AI_gj) {
+	    return (AI_gj) p;
+	} else if (p instanceof RandomPlayer) {
+	    return (RandomPlayer) p;
+	} else if (p instanceof HumanPlayer) {
+	    return (HumanPlayer) p; // その他のPlayer型そのまま返す
+	} else {
+	    return p;
+	}
     }
     //  ---------------------ここまで新メソッドを追加(加藤)------------------------
 }
