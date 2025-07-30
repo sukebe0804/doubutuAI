@@ -3,453 +3,380 @@ import java.util.Collections;
 import java.util.List;
 import java.util.Random;
 
+// PlayerType, Board, Game, Piece クラスが同じパッケージにあるか、適切にインポートされていることを前提とします
+// 必要に応じて以下のインポートを有効にしてください。
+// import PlayerType;
+// import Board;
+// import Game;
+// import Piece;
+// import Hiyoko;
+// import Kirin;
+// import Zou;
+// import Lion;
+
 public class AI_gj extends Player {
 
-    private static final int MAX_DEPTH = 5; // 探索の深さ
+    private static final int MAX_DEPTH = 7; // 探索の深さ
     private static final int WIN_SCORE = 100000; // 勝利時の評価点
     private static final int LOSE_SCORE = -100000; // 敗北時の評価点
 
-    // 駒の価値を設定（調整済み）
+    // 駒の価値を設定（AlphaBeta.javaを参考に調整、またはさらに調整）
     private static final int HIYOKO_VALUE = 80;
     private static final int KIRIN_VALUE = 200;
     private static final int ZOU_VALUE = 200;
     private static final int LION_VALUE = 10000;
-    private static final int NIWATORI_VALUE = 150; // 変更: 100 -> 150
+    private static final int NIWATORI_VALUE = 100; // にわとりの価値を上げる
 
-    // 盤上の位置ごとの価値 (調整済み)
+    // 盤上の位置ごとの価値 (例: 中央を高く、端を低く)
     // 盤面サイズ: 4x3
     // { {A1, A2, A3}, {B1, B2, B3}, {C1, C2, C3}, {D1, D2, D3} }
-    // A列 (敵陣) D列 (自陣)
-    // PLAYER1 (先手) 視点
-    private static final int[][] BOARD_POSITION_VALUES_PLAYER1 = {
-        {10, 25, 10}, // 変更: {10, 15, 10} -> {10, 25, 10} (最奥中央の価値を高く)
-        { 5,  7,  5},
-        { 2,  3,  2},
-        { 1,  1,  1}  // 自陣
+    // 先手 (PLAYER1) 視点 (上が敵陣)
+    // 0: [0,0] [0,1] [0,2] (敵陣)
+    // 1: [1,0] [1,1] [1,2]
+    // 2: [2,0] [2,1] [2,2]
+    // 3: [3,0] [3,1] [3,2] (自陣)
+    private static final int[][] POSITION_VALUE = {
+        {10, 20, 10},
+        {5,  15, 5},
+        {5,  15, 5},
+        {10, 20, 10}
     };
 
-    // PLAYER2 (後手) 視点 (PLAYER1の盤面を上下反転、調整済み)
-    private static final int[][] BOARD_POSITION_VALUES_PLAYER2 = {
-        { 1,  1,  1},  // 自陣
-        { 2,  3,  2},
-        { 5,  7,  5},
-        {10, 25, 10}   // 変更: {10, 15, 10} -> {10, 25, 10} (最奥中央の価値を高く)
-    };
-
-    // 中央支配のボーナス（盤面の中央付近のマス）
-    private static final int CENTER_CONTROL_BONUS = 2; // 駒一つあたり
-    // 中央のマス (例: r=1,2)
-    private static final int[][] CENTRAL_SQUARES = {
-        {1, 0}, {1, 1}, {1, 2},
-        {2, 0}, {2, 1}, {2, 2}
-    };
-
-    // トライ関連の評価定数（調整済み）
-    private static final int TRIAL_BONUS = 2000;  // 変更: 1500 -> 2000 (勝利時の評価点ボーナス)
-    private static final int TRIAL_THREAT_BONUS = 750; // 変更: 500 -> 750 (トライ位置近くにいる場合のボーナス)
-
-    // 危険性評価パラメータ
-    private static final double DANGER_PENALTY_RATIO = 1.5;
-
-    // ライオン接近ペナルティ
-    private static final int LION_PROXIMITY_PENALTY = 100; // 調整可能
-
-    // Randomオブジェクト
-    private Random rand;
-
-
-    public AI_gj(String name, PlayerType type) {
-        super(name);
-        this.setPlayerType(type);
-        this.rand = new Random(); // コンストラクタで初期化
-    }
-
+    // コンストラクタ
     public AI_gj(String name) {
         super(name);
-        this.rand = new Random(); // コンストラクタで初期化
     }
-
 
     @Override
     public int[] chooseMove(Game game) {
-	Board currentBoard = game.getBoard().clone();
-	List<Piece> myCapturedPieces = new ArrayList<>(this.getCapturedPieces());
-    
-	// 初手判定ロジック
-	boolean isFirstTurn = myCapturedPieces.isEmpty();
-	if (this.getPlayerType() == PlayerType.PLAYER1) {
-	    isFirstTurn = isFirstTurn && game.getPlayerB().getCapturedPieces().isEmpty();
-	} else {
-	    isFirstTurn = isFirstTurn && game.getPlayerA().getCapturedPieces().isEmpty();
-	}
+        // 現在のプレイヤータイプを設定
+        this.setPlayerType(game.getCurrentPlayer().getPlayerType());
 
-	if (isFirstTurn) {
-	    System.out.println(this.getName() + ": 初手なのでランダムな手を選択します。");
-        
-	    List<int[]> allPossibleFirstMoves = generateAllLegalMoves(currentBoard, myCapturedPieces, this.getPlayerType());
-        
-	    if (!allPossibleFirstMoves.isEmpty()) {
-		int[] randomMove = allPossibleFirstMoves.get(rand.nextInt(allPossibleFirstMoves.size()));
-		int moveType = randomMove[0];
-		if (moveType == 0) { // 駒の移動
-		    return new int[]{randomMove[1], randomMove[2], randomMove[3], randomMove[4]};
-		} else { // 手駒を打つ
-		    return new int[]{-1, randomMove[5], randomMove[3], randomMove[4]};
-		}
-	    } else {
-		System.err.println(this.getName() + " は初手の合法手を見つけられませんでした。");
-		return null;
-	    }
-	}
-	// 初手判定ロジックここまで
+        // すべての合法手を生成
+        List<int[]> legalMoves = getAllPossibleMoves(game);
 
-	// 2手目以降の通常処理 (ミニマックス探索)
-	List<Piece> opponentCapturedPieces = new ArrayList<>();
-
-	if (this.getPlayerType() == PlayerType.PLAYER1) {
-	    opponentCapturedPieces.addAll(game.getPlayerB().getCapturedPieces());
-	} else {
-	    opponentCapturedPieces.addAll(game.getPlayerA().getCapturedPieces());
-	}
-
-	List<int[]> internalAllPossibleMoves = new ArrayList<>();
-	// Pieceの移動の合法手生成
-	for (int r = 0; r < Board.ROWS; r++) {
-	    for (int c = 0; c < Board.COLS; c++) {
-		Piece piece = currentBoard.getPiece(r, c);
-		if (piece != null && piece.getOwner() == this.getPlayerType()) {
-		    List<int[]> movesForPiece = piece.getPossibleMoves(r, c, currentBoard);
-		    for (int[] move : movesForPiece) {
-			Board tempBoard = currentBoard.clone();
-			Piece pieceToMove = tempBoard.getPiece(r, c);
-			Piece capturedInSim = tempBoard.getPiece(move[0], move[1]);
-
-			tempBoard.removePiece(r, c);
-			tempBoard.placePiece(pieceToMove, move[0], move[1]);
-                    
-			if (pieceToMove instanceof Hiyoko) {
-			    Hiyoko hiyoko = (Hiyoko) pieceToMove;
-			    if (!hiyoko.isPromoted() &&
-				((hiyoko.getOwner() == PlayerType.PLAYER1 && move[0] == 0) ||
-				 (hiyoko.getOwner() == PlayerType.PLAYER2 && move[0] == Board.ROWS - 1))) {
-				hiyoko.promote();
-			    }
-			}
-
-			if (!isPlayerInCheckInternal(tempBoard, this.getPlayerType())) {
-			    internalAllPossibleMoves.add(new int[]{0, r, c, move[0], move[1], -1});
-			}
-
-			// ボード戻す
-			tempBoard.removePiece(move[0], move[1]);
-			tempBoard.placePiece(pieceToMove, r, c);
-			if (capturedInSim != null) {
-			    tempBoard.placePiece(capturedInSim, move[0], move[1]);
-			}
-			if (pieceToMove instanceof Hiyoko && ((Hiyoko) pieceToMove).isPromoted() &&
-			    ((pieceToMove.getOwner() == PlayerType.PLAYER1 && move[0] == 0) ||
-			     (pieceToMove.getOwner() == PlayerType.PLAYER2 && move[0] == Board.ROWS - 1))) {
-			    ((Hiyoko) pieceToMove).demote();
-			}
-		    }
-		}
-	    }
-	}
-
-	// 手駒を打つ合法手生成
-	for (int i = 0; i < myCapturedPieces.size(); i++) {
-	    Piece pieceToDrop = myCapturedPieces.get(i);
-	    for (int r = 0; r < Board.ROWS; r++) {
-		for (int c = 0; c < Board.COLS; c++) {
-		    if (currentBoard.isEmpty(r, c)) {
-			Board tempBoard = currentBoard.clone();
-			tempBoard.placePiece(pieceToDrop, r, c);
-
-			if (!isPlayerInCheckInternal(tempBoard, this.getPlayerType())) {
-			    internalAllPossibleMoves.add(new int[]{1, -1, -1, r, c, i});
-			}
-			tempBoard.removePiece(r, c);
-		    }
-		}
-	    }
-	}
-
-	if (internalAllPossibleMoves.isEmpty()) {
-	    System.err.println(this.getName() + " は合法手を見つけられませんでした。投了します。");
-	    return null;
-	}
-
-	// 駒の評価順にソート
-	sortMoves(internalAllPossibleMoves, currentBoard, this.getPlayerType());
-
-	List<int[]> bestMoves = new ArrayList<>();
-	int bestScore = LOSE_SCORE - 1;
-	int[] bestInternalMove = null;
-
-	int alpha = LOSE_SCORE - 1;
-	int beta = WIN_SCORE + 1;
-
-	for (int[] move : internalAllPossibleMoves) {
-	    Board nextBoard = currentBoard.clone();
-	    List<Piece> nextMyCaptured = new ArrayList<>(myCapturedPieces);
-	    List<Piece> nextOpponentCaptured = new ArrayList<>(opponentCapturedPieces);
-
-	    Piece capturedPiece = applyMove(nextBoard, nextMyCaptured, nextOpponentCaptured, this.getPlayerType(), move);
-	    if (capturedPiece != null) {
-		capturedPiece.setOwner(this.getPlayerType());
-		if (capturedPiece instanceof Hiyoko) {
-		    ((Hiyoko) capturedPiece).demote();
-		}
-		nextMyCaptured.add(capturedPiece);
-	    }
-
-	    PlayerType nextPlayerType = (this.getPlayerType() == PlayerType.PLAYER1)
-                ? PlayerType.PLAYER2 : PlayerType.PLAYER1;
-
-	    int score = minimax(nextBoard, nextOpponentCaptured, nextMyCaptured, nextPlayerType, MAX_DEPTH - 1, alpha, beta);
-
-	    if (score > bestScore) {
-		bestScore = score;
-		bestMoves.clear();
-		bestMoves.add(move);
-	    } else if (score == bestScore) {
-		bestMoves.add(move);
-	    }
-	    alpha = Math.max(alpha, score);
-	}
-
-	if (!bestMoves.isEmpty()) {
-	    bestInternalMove = bestMoves.get(rand.nextInt(bestMoves.size()));
-	} else {
-	    System.err.println(this.getName() + " が最適な手を見つけられませんでした。最初の合法手を返します。");
-	    bestInternalMove = internalAllPossibleMoves.get(0);
-	}
-
-	if (bestInternalMove != null) {
-	    int moveType = bestInternalMove[0];
-	    if (moveType == 0) {
-		return new int[]{bestInternalMove[1], bestInternalMove[2], bestInternalMove[3], bestInternalMove[4]};
-	    } else {
-		return new int[]{-1, bestInternalMove[5], bestInternalMove[3], bestInternalMove[4]};
-	    }
-	}
-	return null;
-    }
-
-    /**
-     * ミニマックスアルゴリズムの実装
-     * @param board 現在の盤面
-     * @param currentPlayerCapturedPieces 現在の手番のプレイヤーの手駒
-     * @param opponentCapturedPieces 相手の手番のプレイヤーの手駒
-     * @param currentPlayerType 現在の手番のプレイヤータイプ
-     * @param depth 探索の残り深さ
-     * @param alpha アルファ値
-     * @param beta ベータ値
-     * @return 評価点
-     */
-    private int minimax(Board board, List<Piece> currentPlayerCapturedPieces, List<Piece> opponentCapturedPieces, PlayerType currentPlayerType, int depth, int alpha, int beta) {
-        if (depth == 0 || isTerminal(board, currentPlayerCapturedPieces, opponentCapturedPieces, currentPlayerType)) {
-            return evaluate(board, currentPlayerCapturedPieces, opponentCapturedPieces, currentPlayerType);
+        if (legalMoves.isEmpty()) {
+            return null; // 動かせる手がない場合
         }
 
-        List<int[]> allPossibleMoves = new ArrayList<>();
-        // 駒の移動の合法手生成
-        for (int r = 0; r < Board.ROWS; r++) {
-            for (int c = 0; c < Board.COLS; c++) {
-                Piece piece = board.getPiece(r, c);
-                if (piece != null && piece.getOwner() == currentPlayerType) {
-                    List<int[]> movesForPiece = piece.getPossibleMoves(r, c, board);
-                    for (int[] move : movesForPiece) {
-                        Board tempBoard = board.clone();
-                        Piece pieceToMove = tempBoard.getPiece(r, c);
-                        Piece capturedInSim = tempBoard.getPiece(move[0], move[1]);
+        // アルファベータ法で最善手を探索
+        int bestValue = Integer.MIN_VALUE;
+        int[] bestMove = null;
 
-                        tempBoard.removePiece(r, c);
-                        tempBoard.placePiece(pieceToMove, move[0], move[1]);
-                        
-                        if (pieceToMove instanceof Hiyoko) {
-                            Hiyoko hiyoko = (Hiyoko) pieceToMove;
-                            if (!hiyoko.isPromoted() &&
-                                ((hiyoko.getOwner() == PlayerType.PLAYER1 && move[0] == 0) ||
-                                 (hiyoko.getOwner() == PlayerType.PLAYER2 && move[0] == Board.ROWS - 1))) {
-                                hiyoko.promote();
-                            }
-                        }
+        // 合法手をソートして探索効率を向上させる
+        sortMoves(legalMoves, game.getBoard(), this.playerType);
 
-                        if (!isPlayerInCheckInternal(tempBoard, currentPlayerType)) {
-                            allPossibleMoves.add(new int[]{0, r, c, move[0], move[1], -1});
-                        }
-                        
-                        tempBoard.removePiece(move[0], move[1]);
-                        tempBoard.placePiece(pieceToMove, r, c);
-                        if(capturedInSim != null) {
-                            tempBoard.placePiece(capturedInSim, move[0], move[1]);
-                        }
-                        if (pieceToMove instanceof Hiyoko && ((Hiyoko)pieceToMove).isPromoted() &&
-                            ((pieceToMove.getOwner() == PlayerType.PLAYER1 && move[0] == 0) ||
-                             (pieceToMove.getOwner() == PlayerType.PLAYER2 && move[0] == Board.ROWS - 1))) {
-                            ((Hiyoko)pieceToMove).demote();
-                        }
-                    }
+
+        for (int[] move : legalMoves) {
+            // 仮のゲーム状態を作成
+            Game newGame = game.clone();
+            
+            // 実際に手を適用（ゲームの状態を変更）
+            if (move[0] == 0) { // 駒の移動
+                int fromRow = move[1];
+                int fromCol = move[2];
+                int toRow = move[3];
+                int toCol = move[4];
+                
+                // 仮の移動を実行
+                newGame.performMove(fromRow, fromCol, toRow, toCol);
+                
+                // 評価
+                int value = minimax(newGame, MAX_DEPTH, Integer.MIN_VALUE, Integer.MAX_VALUE, false);
+
+                if (value > bestValue) {
+                    bestValue = value;
+                    bestMove = move;
                 }
-            }
-        }
-        for (int i = 0; i < currentPlayerCapturedPieces.size(); i++) {
-            Piece pieceToDrop = currentPlayerCapturedPieces.get(i);
-            for (int r = 0; r < Board.ROWS; r++) {
-                for (int c = 0; c < Board.COLS; c++) {
-                    if (board.isEmpty(r, c)) {
-                        Board tempBoard = board.clone();
-                        tempBoard.placePiece(pieceToDrop, r, c);
+            } else if (move[0] == 1) { // 駒の打ち込み
+                int pieceIndex = move[1];
+                int toRow = move[2];
+                int toCol = move[3];
 
-                        if (!isPlayerInCheckInternal(tempBoard, currentPlayerType)) {
-                            allPossibleMoves.add(new int[]{1, -1, -1, r, c, i});
+                // 打ち込む駒のタイプを特定し、新しいインスタンスを作成する（重要！）
+                Piece pieceToDrop = null;
+                // GameのPlayerAまたはPlayerBから手駒を取得
+                Player currentPlayerInNewGame = (this.playerType == PlayerType.PLAYER1) ? newGame.getPlayerA() : newGame.getPlayerB();
+                if (currentPlayerInNewGame.getCapturedPieces().size() > pieceIndex) {
+                    Piece capturedPiece = currentPlayerInNewGame.getCapturedPieces().get(pieceIndex);
+                    if (capturedPiece instanceof Hiyoko) {
+                        pieceToDrop = new Hiyoko(this.playerType);
+                        if (capturedPiece.isPromoted()) {
+                            ((Hiyoko) pieceToDrop).promote();
                         }
-                        tempBoard.removePiece(r, c);
+                    } else if (capturedPiece instanceof Kirin) {
+                        pieceToDrop = new Kirin(this.playerType);
+                    } else if (capturedPiece instanceof Zou) {
+                        pieceToDrop = new Zou(this.playerType);
+                    } else if (capturedPiece instanceof Lion) {
+                        pieceToDrop = new Lion(this.playerType);
                     }
-                }
-            }
-        }
-
-        if (allPossibleMoves.isEmpty()) {
-            return (currentPlayerType == this.getPlayerType()) ? LOSE_SCORE : WIN_SCORE;
-        }
-
-        sortMoves(allPossibleMoves, board, currentPlayerType);
-
-        if (currentPlayerType == this.getPlayerType()) {
-            int maxEval = LOSE_SCORE - 1;
-            for (int[] move : allPossibleMoves) {
-                Board nextBoard = board.clone();
-                List<Piece> nextMaxPlayerCaptured = new ArrayList<>(currentPlayerCapturedPieces);
-                List<Piece> nextMinPlayerCaptured = new ArrayList<>(opponentCapturedPieces);
-
-                Piece captured = applyMove(nextBoard, nextMaxPlayerCaptured, nextMinPlayerCaptured, currentPlayerType, move);
-                if (captured != null) {
-                    captured.setOwner(currentPlayerType);
-                    if (captured instanceof Hiyoko) {
-                        ((Hiyoko) captured).demote();
-                    }
-                    nextMaxPlayerCaptured.add(captured);
                 }
                 
-                int eval = minimax(nextBoard, nextMinPlayerCaptured, nextMaxPlayerCaptured, (currentPlayerType == PlayerType.PLAYER1) ? PlayerType.PLAYER2 : PlayerType.PLAYER1, depth - 1, alpha, beta);
-                maxEval = Math.max(maxEval, eval);
-                alpha = Math.max(alpha, eval);
-                if (beta <= alpha) {
-                    break;
+                if (pieceToDrop != null) {
+                    newGame.performDrop(pieceToDrop, toRow, toCol);
+
+                    // 評価
+                    int value = minimax(newGame, MAX_DEPTH, Integer.MIN_VALUE, Integer.MAX_VALUE, false);
+
+                    if (value > bestValue) {
+                        bestValue = value;
+                        bestMove = move;
+                    }
+                }
+            }
+        }
+        return bestMove;
+    }
+
+
+    private int minimax(Game game, int depth, int alpha, int beta, boolean maximizingPlayer) {
+        PlayerType currentPlayerType = maximizingPlayer ? this.playerType : 
+                                       (this.playerType == PlayerType.PLAYER1 ? PlayerType.PLAYER2 : PlayerType.PLAYER1);
+
+        // 終了条件
+        PlayerType winner = game.isGameOver();
+        if (winner != null) {
+            if (winner == this.playerType) {
+                return WIN_SCORE - (MAX_DEPTH - depth); // 早く勝つほど高評価
+            } else {
+                return LOSE_SCORE + (MAX_DEPTH - depth); // 相手に早く負けるほど低評価
+            }
+        }
+        if (depth == 0) {
+            return evaluateBoard(game.getBoard(), game, this.playerType); // 評価関数
+        }
+
+        List<int[]> possibleMoves = getAllPossibleMoves(game);
+
+        if (maximizingPlayer) {
+            int maxEval = Integer.MIN_VALUE;
+            for (int[] move : possibleMoves) {
+                Game newGame = game.clone();
+                if (move[0] == 0) { // 駒の移動
+                    int fromRow = move[1];
+                    int fromCol = move[2];
+                    int toRow = move[3];
+                    int toCol = move[4];
+                    
+                    newGame.performMove(fromRow, fromCol, toRow, toCol);
+
+                    int eval = minimax(newGame, depth - 1, alpha, beta, false);
+                    maxEval = Math.max(maxEval, eval);
+                    alpha = Math.max(alpha, eval);
+                    if (beta <= alpha) {
+                        break; // βカット
+                    }
+                } else if (move[0] == 1) { // 駒の打ち込み
+                    int pieceIndex = move[1];
+                    int toRow = move[2];
+                    int toCol = move[3];
+                    // 打ち込む駒のタイプを特定し、新しいインスタンスを作成する（重要！）
+                    Piece pieceToDrop = null;
+                    Player currentPlayerInNewGame = (this.playerType == PlayerType.PLAYER1) ? newGame.getPlayerA() : newGame.getPlayerB();
+                    if (currentPlayerInNewGame.getCapturedPieces().size() > pieceIndex) {
+                        Piece captured = currentPlayerInNewGame.getCapturedPieces().get(pieceIndex);
+                        if (captured instanceof Hiyoko) {
+                            pieceToDrop = new Hiyoko(this.playerType);
+                            // 手駒は強制的に成り解除されるため、このifは不要だが、念のため
+                            if (captured.isPromoted()) {
+                                ((Hiyoko) captured).unPromote(); // 成り状態を解除
+                            }
+                        } else if (captured instanceof Kirin) {
+                            pieceToDrop = new Kirin(this.playerType);
+                        } else if (captured instanceof Zou) {
+                            pieceToDrop = new Zou(this.playerType);
+                        } else if (captured instanceof Lion) {
+                            pieceToDrop = new Lion(this.playerType);
+                        }
+                    }
+
+                    if (pieceToDrop != null) {
+                        newGame.performDrop(pieceToDrop, toRow, toCol);
+
+                        int eval = minimax(newGame, depth - 1, alpha, beta, false);
+                        maxEval = Math.max(maxEval, eval);
+                        alpha = Math.max(alpha, eval);
+                        if (beta <= alpha) {
+                            break; // βカット
+                        }
+                    }
                 }
             }
             return maxEval;
-        } else {
-            int minEval = WIN_SCORE + 1;
-            for (int[] move : allPossibleMoves) {
-                Board nextBoard = board.clone();
-                List<Piece> nextMinPlayerCaptured = new ArrayList<>(currentPlayerCapturedPieces);
-                List<Piece> nextMaxPlayerCaptured = new ArrayList<>(opponentCapturedPieces);
+        } else { // minimizingPlayer
+            int minEval = Integer.MAX_VALUE;
+            for (int[] move : possibleMoves) {
+                Game newGame = game.clone();
+                if (move[0] == 0) { // 駒の移動
+                    int fromRow = move[1];
+                    int fromCol = move[2];
+                    int toRow = move[3];
+                    int toCol = move[4];
 
-                Piece captured = applyMove(nextBoard, nextMinPlayerCaptured, nextMaxPlayerCaptured, currentPlayerType, move);
-                if (captured != null) {
-                    captured.setOwner(currentPlayerType);
-                    if (captured instanceof Hiyoko) {
-                        ((Hiyoko) captured).demote();
+                    newGame.performMove(fromRow, fromCol, toRow, toCol);
+
+                    int eval = minimax(newGame, depth - 1, alpha, beta, true);
+                    minEval = Math.min(minEval, eval);
+                    beta = Math.min(beta, eval);
+                    if (beta <= alpha) {
+                        break; // αカット
                     }
-                    nextMinPlayerCaptured.add(captured);
-                }
-                
-                int eval = minimax(nextBoard, nextMaxPlayerCaptured, nextMinPlayerCaptured, (currentPlayerType == PlayerType.PLAYER1) ? PlayerType.PLAYER2 : PlayerType.PLAYER1, depth - 1, alpha, beta);
-                minEval = Math.min(minEval, eval);
-                beta = Math.min(beta, eval);
-                if (beta <= alpha) {
-                    break;
+                } else if (move[0] == 1) { // 駒の打ち込み
+                    int pieceIndex = move[1];
+                    int toRow = move[2];
+                    int toCol = move[3];
+                    // 打ち込む駒のタイプを特定し、新しいインスタンスを作成する（重要！）
+                    Piece pieceToDrop = null;
+                    Player currentPlayerInNewGame = (this.playerType == PlayerType.PLAYER1) ? newGame.getPlayerA() : newGame.getPlayerB();
+                    // 相手の手駒リストから駒を取得するが、playerTypeが逆になっているため、以下の行を修正
+                    Player opponentPlayerInNewGame = (this.playerType == PlayerType.PLAYER1) ? newGame.getPlayerB() : newGame.getPlayerA();
+
+                    if (opponentPlayerInNewGame.getCapturedPieces().size() > pieceIndex) {
+                        Piece captured = opponentPlayerInNewGame.getCapturedPieces().get(pieceIndex);
+                        if (captured instanceof Hiyoko) {
+                            pieceToDrop = new Hiyoko(currentPlayerType); // 相手のプレイヤータイプで駒を作成
+                            if (captured.isPromoted()) {
+                                ((Hiyoko) captured).unPromote(); // 成り状態を解除
+                            }
+                        } else if (captured instanceof Kirin) {
+                            pieceToDrop = new Kirin(currentPlayerType);
+                        } else if (captured instanceof Zou) {
+                            pieceToDrop = new Zou(currentPlayerType);
+                        } else if (captured instanceof Lion) {
+                            pieceToDrop = new Lion(currentPlayerType);
+                        }
+                    }
+
+                    if (pieceToDrop != null) {
+                        newGame.performDrop(pieceToDrop, toRow, toCol);
+                        int eval = minimax(newGame, depth - 1, alpha, beta, true);
+                        minEval = Math.min(minEval, eval);
+                        beta = Math.min(beta, eval);
+                        if (beta <= alpha) {
+                            break; // αカット
+                        }
+                    }
                 }
             }
             return minEval;
         }
     }
 
-    private Piece applyMove(Board board, List<Piece> myCapturedPieces, List<Piece> opponentCapturedPieces, PlayerType currentPlayerType, int[] move) {
-        int moveType = move[0];
-        int fromR = move[1];
-        int fromC = move[2];
-        int toR = move[3];
-        int toC = move[4];
-        int capturedIdx = move[5];
 
-        Piece capturedPiece = null;
+    private int evaluateBoard(Board board, Game game, PlayerType evaluatingPlayerType) {
+        int score = 0;
+        PlayerType opponentPlayerType = (evaluatingPlayerType == PlayerType.PLAYER1) ? PlayerType.PLAYER2 : PlayerType.PLAYER1;
 
-        if (moveType == 0) {
-            Piece pieceToMove = board.getPiece(fromR, fromC);
-            capturedPiece = board.getPiece(toR, toC);
-            
-            board.removePiece(fromR, fromC);
-            board.placePiece(pieceToMove, toR, toC);
-            
-            if (pieceToMove instanceof Hiyoko) {
-                Hiyoko hiyoko = (Hiyoko) pieceToMove;
-                if (!hiyoko.isPromoted() &&
-                    ((hiyoko.getOwner() == PlayerType.PLAYER1 && toR == 0) ||
-                     (hiyoko.getOwner() == PlayerType.PLAYER2 && toR == Board.ROWS - 1))) {
-                    hiyoko.promote();
-                }
-            }
-            return capturedPiece;
-        } else if (moveType == 1) {
-            Piece pieceToDrop = myCapturedPieces.remove(capturedIdx);
-            board.placePiece(pieceToDrop, toR, toC);
-            return null;
-        }
-        return null;
-    }
-
-    private boolean isPlayerInCheckInternal(Board board, PlayerType playerType) {
-        int[] lionPos = findLion(board, playerType);
-        if (lionPos == null) {
-            return false; 
-        }
-
-        PlayerType opponentType = (playerType == PlayerType.PLAYER1) ? PlayerType.PLAYER2 : PlayerType.PLAYER1;
-
+        // 駒の価値の合計
         for (int r = 0; r < Board.ROWS; r++) {
             for (int c = 0; c < Board.COLS; c++) {
                 Piece piece = board.getPiece(r, c);
-                if (piece != null && piece.getOwner() == opponentType) {
-                    List<int[]> possibleAttacks = piece.getPossibleMoves(r, c, board);
-                    for (int[] attackMove : possibleAttacks) {
-                        if (attackMove[0] == lionPos[0] && attackMove[1] == lionPos[1]) {
-                            return true;
+                if (piece != null) {
+                    if (piece.getOwner() == evaluatingPlayerType) {
+                        score += getPieceValue(piece);
+                        score += POSITION_VALUE[r][c]; // 位置ボーナス
+                    } else {
+                        score -= getPieceValue(piece);
+                        score -= POSITION_VALUE[r][c]; // 相手の駒なので減点
+                    }
+                }
+            }
+        }
+
+        // 持ち駒の価値の合計（打ち込みの機会）
+        Player evaluatingPlayer = (evaluatingPlayerType == PlayerType.PLAYER1) ? game.getPlayerA() : game.getPlayerB();
+        for (Piece p : evaluatingPlayer.getCapturedPieces()) {
+            score += getPieceValue(p) / 2; // 持ち駒は盤上の駒より価値を低く見積もる
+        }
+        Player opponentPlayer = (evaluatingPlayerType == PlayerType.PLAYER1) ? game.getPlayerB() : game.getPlayerA();
+        for (Piece p : opponentPlayer.getCapturedPieces()) {
+            score -= getPieceValue(p) / 2;
+        }
+
+        // ライオンの安全度 (追加の評価項目)
+        // 自分のライオンが危険にさらされていないか
+        // 相手のライオンを攻撃できるか
+        score += evaluateLionSafetyAndThreat(board, game, evaluatingPlayerType);
+
+
+        // トライルールの考慮
+        // 自分のライオンが敵陣の最終行に到達しているか
+        // 相手のライオンが自陣の最終行に到達しているか
+        for (int r = 0; r < Board.ROWS; r++) {
+            for (int c = 0; c < Board.COLS; c++) {
+                Piece piece = board.getPiece(r, c);
+                if (piece instanceof Lion) {
+                    if (piece.getOwner() == evaluatingPlayerType) {
+                        // 自分のライオンがトライできる位置にいるか
+                        if (evaluatingPlayerType == PlayerType.PLAYER1 && r == Board.ROWS - 1) { // Player1は下に行くほど進む
+                            score += WIN_SCORE / 2; // トライの可能性を高く評価
+                        } else if (evaluatingPlayerType == PlayerType.PLAYER2 && r == 0) { // Player2は上に行くほど進む
+                            score += WIN_SCORE / 2; // トライの可能性を高く評価
+                        }
+                    } else { // 相手のライオン
+                        // 相手のライオンがトライできる位置にいるか
+                        if (opponentPlayerType == PlayerType.PLAYER1 && r == Board.ROWS - 1) {
+                            score -= WIN_SCORE / 2; // 相手のトライの可能性を低く評価
+                        } else if (opponentPlayerType == PlayerType.PLAYER2 && r == 0) {
+                            score -= WIN_SCORE / 2; // 相手のトライの可能性を低く評価
                         }
                     }
                 }
             }
-            }
-        return false;
+        }
+
+
+        // 詰みチェック（相手のライオンが詰んでいるか）
+        if (game.isCheckmate(opponentPlayerType)) {
+            score += WIN_SCORE; // 相手を詰ませたら勝利点
+        }
+        // 自分が詰まされていないか
+        if (game.isCheckmate(evaluatingPlayerType)) {
+            score -= WIN_SCORE; // 自分が詰まされたら敗北点
+        }
+
+
+        return score;
     }
 
+    private int evaluateLionSafetyAndThreat(Board board, Game game, PlayerType evaluatingPlayerType) {
+        int safetyScore = 0;
+        PlayerType opponentPlayerType = (evaluatingPlayerType == PlayerType.PLAYER1) ? PlayerType.PLAYER2 : PlayerType.PLAYER1;
 
-    private boolean isTerminal(Board board, List<Piece> currentPlayerCapturedPieces, List<Piece> opponentCapturedPieces, PlayerType currentPlayerType) {
-        if (findLion(board, currentPlayerType) == null) {
-            return true;
+        int[] myLionPos = findLion(board, evaluatingPlayerType);
+        int[] opponentLionPos = findLion(board, opponentPlayerType);
+
+        if (myLionPos != null) {
+            // 自分のライオンが王手されているか
+            if (game.isKingInCheck(evaluatingPlayerType)) {
+                safetyScore -= 500; // 王手されていると大きなペナルティ
+            }
+
+            // 自分のライオンを守る駒の数 (周囲8マス)
+            int defenders = countDefenders(board, myLionPos[0], myLionPos[1], evaluatingPlayerType);
+            safetyScore += defenders * 50; // 守る駒が多いほどボーナス
         }
-        if (findLion(board, (currentPlayerType == PlayerType.PLAYER1) ? PlayerType.PLAYER2 : PlayerType.PLAYER1) == null) {
-            return true;
+
+        if (opponentLionPos != null) {
+            // 相手のライオンが王手されているか
+            if (game.isKingInCheck(opponentPlayerType)) {
+                safetyScore += 500; // 相手が王手されているとボーナス
+            }
+
+            // 相手のライオンを攻撃できる駒の数
+            int attackers = countAttackers(board, opponentLionPos[0], opponentLionPos[1], evaluatingPlayerType);
+            safetyScore += attackers * 50; // 攻撃できる駒が多いほどボーナス
         }
-        
-        if (isTrialWin(board, currentPlayerType)) {
-            return true;
-        }
-        if (isTrialWin(board, (currentPlayerType == PlayerType.PLAYER1) ? PlayerType.PLAYER2 : PlayerType.PLAYER1)) {
-            return true;
-        }
-        
-        return false;
+
+        return safetyScore;
     }
 
     private int[] findLion(Board board, PlayerType playerType) {
         for (int r = 0; r < Board.ROWS; r++) {
             for (int c = 0; c < Board.COLS; c++) {
                 Piece piece = board.getPiece(r, c);
-                if (piece != null && piece instanceof Lion && piece.getOwner() == playerType) {
+                if (piece instanceof Lion && piece.getOwner() == playerType) {
                     return new int[]{r, c};
                 }
             }
@@ -457,200 +384,103 @@ public class AI_gj extends Player {
         return null;
     }
 
-    private boolean isTrialWin(Board board, PlayerType playerType) {
-        int[] lionPos = findLion(board, playerType);
-        if (lionPos == null) return false;
-
-        if (playerType == PlayerType.PLAYER1) {
-            return lionPos[0] == 0;
-        } else {
-            return lionPos[0] == Board.ROWS - 1;
-        }
-    }
-
-    private boolean isSquareAttackedBy(Board board, int targetR, int targetC, PlayerType attackingPlayerType) {
-    for (int r = 0; r < Board.ROWS; r++) {
-        for (int c = 0; c < Board.COLS; c++) {
-            Piece piece = board.getPiece(r, c);
-            if (piece != null && piece.getOwner() == attackingPlayerType) {
-                List<int[]> possibleMoves = piece.getPossibleMoves(r, c, board);
-                for (int[] move : possibleMoves) {
-                    if (move[0] == targetR && move[1] == targetC) {
-                        return true;
-                    }
-                }
+    private int countDefenders(Board board, int row, int col, PlayerType playerType) {
+        int count = 0;
+        int[][] deltas = {
+            {-1, 0}, {1, 0}, {0, -1}, {0, 1}, // 上下左右
+            {-1, -1}, {-1, 1}, {1, -1}, {1, 1} // 斜め
+        };
+        for (int[] d : deltas) {
+            int r = row + d[0];
+            int c = col + d[1];
+            if (board.isValidCoordinate(r, c) && board.getPiece(r, c) != null && board.getPiece(r, c).getOwner() == playerType) {
+                count++;
             }
         }
+        return count;
     }
-    return false;
-}
-    
-    /**
-     * 盤面の評価関数
-     * @param board 盤面
-     * @param currentPlayerCapturedPieces 現在の手番のプレイヤーの手駒
-     * @param opponentCapturedPieces 相手の手番のプレイヤーの手駒
-     * @param evaluatePlayerType 評価対象のプレイヤータイプ
-     * @return 評価点
-     */
-    
-       private int evaluate(Board board, List<Piece> currentPlayerCapturedPieces, List<Piece> opponentCapturedPieces, PlayerType evaluatePlayerType) {
-        int[] myLionPos = findLion(board, evaluatePlayerType);
-        int[] opponentLionPos = findLion(board, (evaluatePlayerType == PlayerType.PLAYER1) ? PlayerType.PLAYER2 : PlayerType.PLAYER1);
 
-        if (myLionPos == null) {
-            return LOSE_SCORE;
-        }
-        if (opponentLionPos == null) {
-            return WIN_SCORE;
-        }
-        
-        if (isTrialWin(board, evaluatePlayerType)) {
-            return WIN_SCORE;
-        }
-        if (isTrialWin(board, (evaluatePlayerType == PlayerType.PLAYER1) ? PlayerType.PLAYER2 : PlayerType.PLAYER1)) {
-            return LOSE_SCORE;
-        }
-
-        int score = 0;
-        PlayerType opponentTypeForEval = (evaluatePlayerType == PlayerType.PLAYER1) ? PlayerType.PLAYER2 : PlayerType.PLAYER1;
+    private int countAttackers(Board board, int row, int col, PlayerType playerType) {
+        int count = 0;
+        PlayerType opponentType = (playerType == PlayerType.PLAYER1) ? PlayerType.PLAYER2 : PlayerType.PLAYER1;
 
         for (int r = 0; r < Board.ROWS; r++) {
             for (int c = 0; c < Board.COLS; c++) {
                 Piece piece = board.getPiece(r, c);
-                if (piece != null) {
-                    int pieceValue = getPieceValue(piece);
-                    int positionValue = (evaluatePlayerType == PlayerType.PLAYER1) ? BOARD_POSITION_VALUES_PLAYER1[r][c] : BOARD_POSITION_VALUES_PLAYER2[r][c];
-
-                    int dangerPenalty = 0;
-                    if (isSquareAttackedBy(board, r, c, opponentTypeForEval)) {
-                        dangerPenalty = (int) (pieceValue * DANGER_PENALTY_RATIO);
-                        if (piece instanceof Lion) {
-                            dangerPenalty = 0;
-                        }
-                    }
-
-                    int lionProximityPenalty = 0;
-                    if (piece.getOwner() == evaluatePlayerType && opponentLionPos != null) {
-                        int distance = Math.abs(r - opponentLionPos[0]) + Math.abs(c - opponentLionPos[1]);
-                        if (distance <= 2) {
-                            lionProximityPenalty = LION_PROXIMITY_PENALTY * (3 - distance);
-                        }
-                    }
-                    
-                    if (piece.getOwner() == evaluatePlayerType) {
-                        score += pieceValue + positionValue - dangerPenalty - lionProximityPenalty;
-                    } else {
-                        score -= (pieceValue + positionValue) - dangerPenalty + lionProximityPenalty;
-                    }
-                }
-            }
-        }
-
-        for (Piece piece : currentPlayerCapturedPieces) {
-            score += getPieceValue(piece) / 2;
-        }
-        for (Piece piece : opponentCapturedPieces) {
-            score -= getPieceValue(piece) / 2;
-        }
-
-        int myMobility = 0;
-        int opponentMobility = 0;
-        for (int r = 0; r < Board.ROWS; r++) {
-            for (int c = 0; c < Board.COLS; c++) {
-                Piece piece = board.getPiece(r, c);
-                if (piece != null) {
-                    List<int[]> moves = piece.getPossibleMoves(r, c, board);
-                    if (piece.getOwner() == evaluatePlayerType) {
-                        myMobility += moves.size();
-                    } else {
-                        opponentMobility += moves.size();
-                    }
-                }
-            }
-        }
-        score += myMobility;
-        score -= opponentMobility;
-
-        if (isPlayerInCheckInternal(board, evaluatePlayerType)) {
-            score -= 1000;
-        }
-        if (isPlayerInCheckInternal(board, opponentTypeForEval)) {
-            score += 500;
-        }
-
-        if (myLionPos != null) {
-            int safeSquares = 0;
-            int dangerousSquares = 0;
-            int[][] kingMoves = {
-                {-1, -1}, {-1, 0}, {-1, 1},
-                {0, -1},           {0, 1},
-                {1, -1}, {1, 0}, {1, 1}
-            };
-
-            for (int[] delta : kingMoves) {
-                int r = myLionPos[0] + delta[0];
-                int c = myLionPos[1] + delta[1];
-
-                if (board.isValidCoordinate(r, c)) {
-                    Piece pieceAtSquare = board.getPiece(r, c);
-                    if (pieceAtSquare != null && pieceAtSquare.getOwner() == evaluatePlayerType) {
-                        safeSquares++;
-                    } else {
-                        if (isSquareAttackedBy(board, r, c, opponentTypeForEval)) {
-                            dangerousSquares++;
+                if (piece != null && piece.getOwner() == playerType) {
+                    List<int[]> possibleMoves = piece.getPossibleMoves(r, c, board);
+                    for (int[] move : possibleMoves) {
+                        if (move[0] == row && move[1] == col) { // 攻撃対象が指定のマスなら
+                            count++;
+                            break; // 1つの駒が複数回攻撃できることはないのでbreak
                         }
                     }
                 }
             }
-            score += safeSquares * 10;
-            score -= dangerousSquares * 20;
         }
-
-        for (int[] centralCoord : CENTRAL_SQUARES) {
-            int r = centralCoord[0];
-            int c = centralCoord[1];
-            Piece piece = board.getPiece(r, c);
-            if (piece != null) {
-                if (piece.getOwner() == evaluatePlayerType) {
-                    score += CENTER_CONTROL_BONUS * 2;
-                } else {
-                    score -= CENTER_CONTROL_BONUS * 2;
-                }
-            }
-        }
-
-        if (myLionPos != null) {
-            if (evaluatePlayerType == PlayerType.PLAYER1) {
-                int distToGoal = myLionPos[0];
-                score += TRIAL_THREAT_BONUS * (Board.ROWS - 1 - distToGoal);
-            } else {
-                int distToGoal = Board.ROWS - 1 - myLionPos[0];
-                score += TRIAL_THREAT_BONUS * (Board.ROWS - 1 - distToGoal);
-            }
-        }
-        if (opponentLionPos != null) {
-            if (opponentTypeForEval == PlayerType.PLAYER1) {
-                int distToGoal = opponentLionPos[0];
-                score -= TRIAL_THREAT_BONUS * (Board.ROWS - 1 - distToGoal);
-            } else {
-                int distToGoal = Board.ROWS - 1 - opponentLionPos[0];
-                score -= TRIAL_THREAT_BONUS * (Board.ROWS - 1 - distToGoal);
-            }
-        }
-        
-        return score;
+        return count;
     }
 
-    
-    
+
+    // すべての合法手を生成するヘルパーメソッド
+    // 戻り値の配列は {タイプ, 元の行, 元の列, 移動先の行, 移動先の列, (成りフラグ)}
+    // タイプ: 0 = 移動, 1 = 打ち込み
+    private List<int[]> getAllPossibleMoves(Game game) {
+        List<int[]> allPossibleMoves = new ArrayList<>();
+        Board currentBoard = game.getBoard();
+        PlayerType myPlayerType = game.getCurrentPlayer().getPlayerType();
+
+        // 1. 駒の移動の合法手を収集
+        for (int r = 0; r < Board.ROWS; r++) {
+            for (int c = 0; c < Board.COLS; c++) {
+                Piece piece = currentBoard.getPiece(r, c);
+                if (piece != null && piece.getOwner() == myPlayerType) {
+                    List<int[]> moves = piece.getPossibleMoves(r, c, currentBoard);
+                    for (int[] move : moves) {
+                        // 成りのチェック（ひよこが敵陣に入るとき）
+                        boolean canPromote = false;
+                        if (piece instanceof Hiyoko) {
+                            if (myPlayerType == PlayerType.PLAYER1 && move[0] == Board.ROWS - 1) { // Player1が一番下の行に到達
+                                canPromote = true;
+                            } else if (myPlayerType == PlayerType.PLAYER2 && move[0] == 0) { // Player2が一番上の行に到達
+                                canPromote = true;
+                            }
+                        }
+                        
+                        // 移動が合法で、かつ王手にならないかチェック
+                        // GameクラスのisValidMoveAndNotIntoCheckメソッドを直接利用。
+                        if (game.isValidMoveAndNotIntoCheck(myPlayerType, r, c, move[0], move[1])) {
+                            allPossibleMoves.add(new int[]{0, r, c, move[0], move[1]}); // 成らない手
+                            if (canPromote) {
+                                allPossibleMoves.add(new int[]{0, r, c, move[0], move[1], 1}); // 成る手
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        // 2. 手駒を打つ合法手を収集
+        Player currentPlayer = (myPlayerType == PlayerType.PLAYER1) ? game.getPlayerA() : game.getPlayerB();
+        for (int i = 0; i < currentPlayer.getCapturedPieces().size(); i++) {
+            Piece pieceToDrop = currentPlayer.getCapturedPieces().get(i);
+            for (int r = 0; r < Board.ROWS; r++) {
+                for (int c = 0; c < Board.COLS; c++) {
+                    // 空いているマスであれば打てる AND その手が王手にならないかチェック
+                    // GameクラスのisValidDropAndNotIntoCheckメソッドを直接利用。
+                    if (currentBoard.isEmpty(r, c) && game.isValidDropAndNotIntoCheck(myPlayerType, pieceToDrop, r, c)) {
+                        // 手駒を打つ手は、特別な形式でリストに追加 { タイプ(1), 手駒リストのインデックス, 落とす行, 落とす列 }
+                        allPossibleMoves.add(new int[]{1, i, r, c});
+                    }
+                }
+            }
+        }
+        return allPossibleMoves;
+    }
+
     private int getPieceValue(Piece piece) {
         if (piece instanceof Hiyoko) {
-            if (((Hiyoko) piece).isPromoted()) {
-                return NIWATORI_VALUE;
-            } else {
-                return HIYOKO_VALUE;
-            }
+            return piece.isPromoted() ? NIWATORI_VALUE : HIYOKO_VALUE;
         } else if (piece instanceof Kirin) {
             return KIRIN_VALUE;
         } else if (piece instanceof Zou) {
@@ -661,104 +491,41 @@ public class AI_gj extends Player {
         return 0;
     }
 
+    /**
+     * 探索効率向上のため、合法手をソートするヘルパーメソッド
+     * (捕獲できる手を優先するなど)
+     * @param moves ソート対象の合法手リスト (内部形式)
+     * @param board 現在の盤面
+     * @param playerType 現在のプレイヤータイプ
+     */
     private void sortMoves(List<int[]> moves, Board board, PlayerType playerType) {
+        // λ式でComparatorを定義
         Collections.sort(moves, (move1, move2) -> {
+            // move1とmove2の評価点（仮）を比較して並べ替え
+            // ここでは、単純に駒を取れる手を優先する
             int score1 = 0;
             int score2 = 0;
 
-            if (move1[0] == 0) {
-                Piece target1 = board.getPiece(move1[3], move1[4]);
+            // move1の評価
+            if (move1[0] == 0) { // 駒の移動
+                Piece target1 = board.getPiece(move1[3], move1[4]); // 移動先の駒
                 if (target1 != null && target1.getOwner() != playerType) {
-                    score1 += getPieceValue(target1);
+                    score1 += getPieceValue(target1); // 駒を取れる場合、その駒の価値を加算
                 }
             }
+            // 打ち込みの手は、ここでは捕獲がないので0点（必要に応じて調整）
 
-            if (move2[0] == 0) {
-                Piece target2 = board.getPiece(move2[3], move2[4]);
+            // move2の評価
+            if (move2[0] == 0) { // 駒の移動
+                Piece target2 = board.getPiece(move2[3], move2[4]); // 移動先の駒
                 if (target2 != null && target2.getOwner() != playerType) {
-                    score2 += getPieceValue(target2);
+                    score2 += getPieceValue(target2); // 駒を取れる場合、その駒の価値を加算
                 }
             }
-            
-            return Integer.compare(score2, score1);
+            // 打ち込みの手は、ここでは捕獲がないので0点（必要に応じて調整）
+
+            return Integer.compare(score2, score1); // 降順にソート (より高いスコアの手を優先)
         });
     }
 
-    /**
-     * 指定されたプレイヤーの全ての合法手を生成するヘルパーメソッド
-     * @param board 盤面
-     * @param capturedPieces プレイヤーの手駒リスト
-     * @param playerType プレイヤータイプ
-     * @return 全ての合法手のリスト
-     */
-    private List<int[]> generateAllLegalMoves(Board board, List<Piece> capturedPieces, PlayerType playerType) {
-        List<int[]> allLegalMoves = new ArrayList<>();
-
-        // 駒の移動の合法手生成
-        for (int r = 0; r < Board.ROWS; r++) {
-            for (int c = 0; c < Board.COLS; c++) {
-                Piece piece = board.getPiece(r, c);
-                if (piece != null && piece.getOwner() == playerType) {
-                    List<int[]> movesForPiece = piece.getPossibleMoves(r, c, board);
-                    for (int[] move : movesForPiece) {
-                        // 移動先の盤面をシミュレーション
-                        Board tempBoard = board.clone();
-                        Piece pieceToMove = tempBoard.getPiece(r, c);
-                        Piece capturedInSim = tempBoard.getPiece(move[0], move[1]);
-
-                        tempBoard.removePiece(r, c); // 元の場所から駒を削除
-                        tempBoard.placePiece(pieceToMove, move[0], move[1]); // 新しい場所に配置
-                        
-                        // 成り判定
-                        if (pieceToMove instanceof Hiyoko) {
-                            Hiyoko hiyoko = (Hiyoko) pieceToMove;
-                            if (!hiyoko.isPromoted() &&
-                                ((hiyoko.getOwner() == PlayerType.PLAYER1 && move[0] == 0) ||
-                                 (hiyoko.getOwner() == PlayerType.PLAYER2 && move[0] == Board.ROWS - 1))) {
-                                hiyoko.promote();
-                            }
-                        }
-
-                        // 王手になっていないかチェック（合法手かどうかの判定）
-                        if (!isPlayerInCheckInternal(tempBoard, playerType)) {
-                            allLegalMoves.add(new int[]{0, r, c, move[0], move[1], -1}); // 移動: {0, fromR, fromC, toR, toC, -1}
-                        }
-                        
-                        // シミュレーション後のボードを元の状態に戻す
-                        tempBoard.removePiece(move[0], move[1]);
-                        tempBoard.placePiece(pieceToMove, r, c);
-                        if(capturedInSim != null) { // 捕獲された駒があれば元に戻す
-                            tempBoard.placePiece(capturedInSim, move[0], move[1]);
-                        }
-                        // 成りを一時的に行った場合は元に戻す
-                        if (pieceToMove instanceof Hiyoko && ((Hiyoko)pieceToMove).isPromoted() &&
-                            ((pieceToMove.getOwner() == PlayerType.PLAYER1 && move[0] == 0) ||
-                             (pieceToMove.getOwner() == PlayerType.PLAYER2 && move[0] == Board.ROWS - 1))) {
-                            ((Hiyoko)pieceToMove).demote();
-                        }
-                    }
-                }
-            }
-        }
-
-        // 手駒を打つ処理の合法手生成
-        for (int i = 0; i < capturedPieces.size(); i++) {
-            Piece pieceToDrop = capturedPieces.get(i);
-            for (int r = 0; r < Board.ROWS; r++) {
-                for (int c = 0; c < Board.COLS; c++) {
-                    if (board.isEmpty(r, c)) { // 空いているマスにしか打てない
-                        Board tempBoard = board.clone();
-                        tempBoard.placePiece(pieceToDrop, r, c); // 一時的に駒を配置
-
-                        // 王手になっていないかチェック（合法手かどうかの判定）
-                        if (!isPlayerInCheckInternal(tempBoard, playerType)) {
-                            allLegalMoves.add(new int[]{1, -1, -1, r, c, i}); // 打つ手: {1, -1, -1, dropR, dropC, capturedPieceIndex}
-                        }
-                        tempBoard.removePiece(r, c); // 配置した駒を元に戻す
-                    }
-                }
-            }
-        }
-        return allLegalMoves;
-    }
 }
