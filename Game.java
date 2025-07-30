@@ -30,8 +30,8 @@ public class Game implements Cloneable {
         scanner = new Scanner(System.in);
 	setPlayers(A, B); // 変更:セットメソットでPlayerA, Bを自動設定
 
-        System.out.println("PlayerA: " + PlayerA);
-        System.out.println("PlayerB: " + PlayerB);
+        //System.out.println("PlayerA: " + PlayerA);
+        //System.out.println("PlayerB: " + PlayerB);
 
         PlayerA.setPlayerType(PlayerType.PLAYER1);
         PlayerB.setPlayerType(PlayerType.PLAYER2);
