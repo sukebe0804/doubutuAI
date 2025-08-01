@@ -25,21 +25,25 @@ public class Game implements Cloneable {
     
     public Game() {}
     
-    public Game(Player A, Player B) {
+    public Game(Player A, Player B, Player firstPlayer) {
         board = new Board();
         scanner = new Scanner(System.in);
-	setPlayers(A, B); // 変更:セットメソットでPlayerA, Bを自動設定
+	    setPlayers(A, B); // 変更:セットメソットでPlayerA, Bを自動設定
 
-        //System.out.println("PlayerA: " + PlayerA);
-        //System.out.println("PlayerB: " + PlayerB);
+        System.out.println("PlayerA: " + PlayerA);
+        System.out.println("PlayerB: " + PlayerB);
 
         PlayerA.setPlayerType(PlayerType.PLAYER1);
         PlayerB.setPlayerType(PlayerType.PLAYER2);
 
-        currentPlayer = this.PlayerA; // PlayerA, or Bどちらを先手にするかはここで指定する.
-        initializeGame();
-        this.turnNumber = 0; // ターン数カウンターの初期化
-        this.positionHistory = new HashMap<>(); // ★追加：局面履歴の初期化
+        this.currentPlayer = firstPlayer; 
+        initializeGame(); //
+        this.turnNumber = 0; 
+        this.positionHistory = new HashMap<>(); 
+    }
+    public Game(Player A, Player B) {
+        // デフォルトでPlayerAを先手とする
+        this(A, B, A); // 3引数コンストラクタを呼び出す
     }
     
     // 削除:不要なコンストラクタ(OLearnでのMainで使用していたもの)
@@ -210,33 +214,13 @@ public class Game implements Cloneable {
         printIfNotSilent("AI is thinking...");
         int[] move = null;
 
-        // 最初の2ターン（各プレイヤーの最初の1手）のみ、ライオンを除外したランダムな手を指す
-        if (turnNumber <= 4) {
-            move = getRandomLegalMove(currentPlayer);
-            if (move == null) {
-                printIfNotSilent("ランダムな合法手を見つけられませんでした。AIが詰んだ可能性があります。");
-                if (currentPlayer.getPlayerType() == PlayerType.PLAYER1) {
-                    this.forcedWinner = PlayerType.PLAYER2;
-                } else {
-                    this.forcedWinner = PlayerType.PLAYER1;
-                }
-                return;
-            }
-        } else {
-            // 3ターン目以降は通常のAIロジックで手を選ぶ
-            move = currentPlayer.chooseMove(this);
-        }
+        move = currentPlayer.chooseMove(this);
+        
 
         if (move != null) {
             // CPUの実際の手番ではサイレントモードを無効にしてメッセージを表示
             setSilentMode(false); 
-            if (move[0] == -1) { // 手駒を打つ手
-                // chooseMove内で合法性チェック済みのため、ここではそのまま実行
-                // currentPlayerの手駒リストから駒を取得
-                // move[1]はcapturedPiecesリストのインデックス
-                // ※注意: QLearnのchooseMoveで直接Pieceオブジェクトを渡している場合、
-                // ここでcapturedPieces.get(move[1])が正しいか確認してください。
-                // getRandomLegalMoveではcapturedPiecesのインデックスを渡しているので問題ありません。
+            if (move[0] == -1) { // 手駒を打つ手c
                 Piece pieceToDrop = currentPlayer.getCapturedPieces().get(move[1]);
                 System.out.println(currentPlayer.getName() + "は「" + pieceToDrop.getSymbol() + "」を " + move[2] + "," + move[3] + " に打ちます！");
                 performDrop(pieceToDrop, move[2], move[3]);
@@ -260,59 +244,6 @@ public class Game implements Cloneable {
         }
     }
 
-    // ランダムな合法手を取得するメソッド
-    private int[] getRandomLegalMove(Player player) {
-        List<int[]> legalMoves = new ArrayList<>();
-
-        // 駒の移動による合法手の収集
-        for (int r = 0; r < Board.ROWS; r++) {
-            for (int c = 0; c < Board.COLS; c++) {
-                Piece piece = board.getPiece(r, c);
-                if (piece != null && piece.getOwner() == player.getPlayerType()) {
-                    // ★修正：ターン数が1または2（初手）の場合、かつ駒がライオンの場合はスキップ
-                    if (turnNumber <= 2 && piece instanceof Lion) {
-                        continue; // ライオンの移動は除外
-                    }
-
-                    List<int[]> possiblePieceMoves = piece.getPossibleMoves(r, c, board);
-                    for (int[] toCoord : possiblePieceMoves) {
-                        // この移動が王手にならないかチェック
-                        // クローンしたゲームでシミュレーションし、王手にならないことを確認
-                        if (isValidMoveAndNotIntoCheck(player.getPlayerType(), r, c, toCoord[0], toCoord[1])) {
-                            // 移動: {fromRow, fromCol, toRow, toCol}
-                            legalMoves.add(new int[]{r, c, toCoord[0], toCoord[1]});
-                        }
-                    }
-                }
-            }
-        }
-
-        // 手駒を打つ合法手の収集
-        // ※手駒にはライオンはないので、ここでの特別な除外処理は不要
-        for (int i = 0; i < player.getCapturedPieces().size(); i++) {
-            Piece capturedPiece = player.getCapturedPieces().get(i);
-            for (int r = 0; r < Board.ROWS; r++) {
-                for (int c = 0; c < Board.COLS; c++) {
-                    // 盤面が空いており、かつその打ち手が王手にならないかチェック
-                    if (board.isEmpty(r, c)) {
-                        // クローンしたゲームでシミュレーションし、王手にならないことを確認
-                        if (isValidDropAndNotIntoCheck(player.getPlayerType(), capturedPiece, r, c)) {
-                            // ドロップ: {-1, 手駒インデックス, dropRow, dropCol}
-                            legalMoves.add(new int[]{-1, i, r, c});
-                        }
-                    }
-                }
-            }
-        }
-
-        if (legalMoves.isEmpty()) {
-            return null; // 合法手がない
-        }
-
-        // ランダムに1つ選択
-        Random rand = new Random();
-        return legalMoves.get(rand.nextInt(legalMoves.size()));
-    }
 
     // 駒を動かす処理
     public boolean performMove(int fromRow, int fromCol, int toRow, int toCol) {
