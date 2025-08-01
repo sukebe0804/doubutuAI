@@ -3,20 +3,9 @@ import java.util.Collections;
 import java.util.List;
 import java.util.Random;
 
-// PlayerType, Board, Game, Piece クラスが同じパッケージにあるか、適切にインポートされていることを前提とします
-// 必要に応じて以下のインポートを有効にしてください。
-// import PlayerType;
-// import Board;
-// import Game;
-// import Piece;
-// import Hiyoko;
-// import Kirin;
-// import Zou;
-// import Lion;
-
 public class AI_gj extends Player {
 
-    private static final int MAX_DEPTH = 7; // 探索の深さ
+    private static final int MAX_DEPTH = 5; // 探索の深さ
     private static final int WIN_SCORE = 100000; // 勝利時の評価点
     private static final int LOSE_SCORE = -100000; // 敗北時の評価点
 
@@ -49,6 +38,7 @@ public class AI_gj extends Player {
 
     @Override
     public int[] chooseMove(Game game) {
+        get.silentMode
         // 現在のプレイヤータイプを設定
         this.setPlayerType(game.getCurrentPlayer().getPlayerType());
 
@@ -93,24 +83,11 @@ public class AI_gj extends Player {
                 int toRow = move[2];
                 int toCol = move[3];
 
-                // 打ち込む駒のタイプを特定し、新しいインスタンスを作成する（重要！）
+                // ★修正箇所: ここで新しいインスタンスを作成するのではなく、手駒リストから実際の駒を取得
                 Piece pieceToDrop = null;
-                // GameのPlayerAまたはPlayerBから手駒を取得
                 Player currentPlayerInNewGame = (this.playerType == PlayerType.PLAYER1) ? newGame.getPlayerA() : newGame.getPlayerB();
                 if (currentPlayerInNewGame.getCapturedPieces().size() > pieceIndex) {
-                    Piece capturedPiece = currentPlayerInNewGame.getCapturedPieces().get(pieceIndex);
-                    if (capturedPiece instanceof Hiyoko) {
-                        pieceToDrop = new Hiyoko(this.playerType);
-                        if (capturedPiece.isPromoted()) {
-                            ((Hiyoko) pieceToDrop).promote();
-                        }
-                    } else if (capturedPiece instanceof Kirin) {
-                        pieceToDrop = new Kirin(this.playerType);
-                    } else if (capturedPiece instanceof Zou) {
-                        pieceToDrop = new Zou(this.playerType);
-                    } else if (capturedPiece instanceof Lion) {
-                        pieceToDrop = new Lion(this.playerType);
-                    }
+                    pieceToDrop = currentPlayerInNewGame.getCapturedPieces().get(pieceIndex);
                 }
                 
                 if (pieceToDrop != null) {
@@ -171,30 +148,16 @@ public class AI_gj extends Player {
                     int pieceIndex = move[1];
                     int toRow = move[2];
                     int toCol = move[3];
-                    // 打ち込む駒のタイプを特定し、新しいインスタンスを作成する（重要！）
+                    // ★修正箇所: 新しいインスタンスを作成せず、手駒リストから取得
                     Piece pieceToDrop = null;
                     Player currentPlayerInNewGame = (this.playerType == PlayerType.PLAYER1) ? newGame.getPlayerA() : newGame.getPlayerB();
                     if (currentPlayerInNewGame.getCapturedPieces().size() > pieceIndex) {
-                        Piece captured = currentPlayerInNewGame.getCapturedPieces().get(pieceIndex);
-                        if (captured instanceof Hiyoko) {
-                            pieceToDrop = new Hiyoko(this.playerType);
-                            // 手駒は強制的に成り解除されるため、このifは不要だが、念のため
-                            if (captured.isPromoted()) {
-                                ((Hiyoko) captured).unPromote(); // 成り状態を解除
-                            }
-                        } else if (captured instanceof Kirin) {
-                            pieceToDrop = new Kirin(this.playerType);
-                        } else if (captured instanceof Zou) {
-                            pieceToDrop = new Zou(this.playerType);
-                        } else if (captured instanceof Lion) {
-                            pieceToDrop = new Lion(this.playerType);
-                        }
+                        pieceToDrop = currentPlayerInNewGame.getCapturedPieces().get(pieceIndex);
                     }
-
                     if (pieceToDrop != null) {
                         newGame.performDrop(pieceToDrop, toRow, toCol);
 
-                        int eval = minimax(newGame, depth - 1, alpha, beta, false);
+                        int eval = minimax(newGame, depth - 1, alpha, beta, true);
                         maxEval = Math.max(maxEval, eval);
                         alpha = Math.max(alpha, eval);
                         if (beta <= alpha) {
@@ -226,26 +189,12 @@ public class AI_gj extends Player {
                     int pieceIndex = move[1];
                     int toRow = move[2];
                     int toCol = move[3];
-                    // 打ち込む駒のタイプを特定し、新しいインスタンスを作成する（重要！）
+                    // ★修正箇所: 新しいインスタンスを作成せず、手駒リストから取得
                     Piece pieceToDrop = null;
-                    Player currentPlayerInNewGame = (this.playerType == PlayerType.PLAYER1) ? newGame.getPlayerA() : newGame.getPlayerB();
-                    // 相手の手駒リストから駒を取得するが、playerTypeが逆になっているため、以下の行を修正
                     Player opponentPlayerInNewGame = (this.playerType == PlayerType.PLAYER1) ? newGame.getPlayerB() : newGame.getPlayerA();
 
                     if (opponentPlayerInNewGame.getCapturedPieces().size() > pieceIndex) {
-                        Piece captured = opponentPlayerInNewGame.getCapturedPieces().get(pieceIndex);
-                        if (captured instanceof Hiyoko) {
-                            pieceToDrop = new Hiyoko(currentPlayerType); // 相手のプレイヤータイプで駒を作成
-                            if (captured.isPromoted()) {
-                                ((Hiyoko) captured).unPromote(); // 成り状態を解除
-                            }
-                        } else if (captured instanceof Kirin) {
-                            pieceToDrop = new Kirin(currentPlayerType);
-                        } else if (captured instanceof Zou) {
-                            pieceToDrop = new Zou(currentPlayerType);
-                        } else if (captured instanceof Lion) {
-                            pieceToDrop = new Lion(currentPlayerType);
-                        }
+                        pieceToDrop = opponentPlayerInNewGame.getCapturedPieces().get(pieceIndex);
                     }
 
                     if (pieceToDrop != null) {
