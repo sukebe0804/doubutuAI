@@ -4,7 +4,6 @@ public class Main {
     public static void main(String[] args) {
         HumanPlayer PlayerB = new HumanPlayer("あなた");
         
-        // Scannerをmainメソッド内で宣言し、ゲーム終了まで閉じない
         Scanner scanner = new Scanner(System.in); 
         System.out.println("どのAIと戦いますか？\n以下の選択肢から一つ選択してください.\n（西岡AI: 1, 五籐AI: 2, 加藤AI: 3, 宮田AI: 4, 栗政AI: 5）: ");
 
