@@ -69,7 +69,8 @@ public class MinMax extends Player {
     }
 
     @Override
-    public int[] chooseMove(Game game) {
+    public int[] chooseMove(Game game) { //AIがどのような探索をしているかを調べられるメソッド
+        game.setSilentMode(true);
         // 現在のプレイヤーとボードの状態をMinMaxアルゴリズムのルートノードとして設定
         SimulationState initialState = new SimulationState(game.getBoard().clone(), game.getPlayerA().clone(), game.getPlayerB().clone(), this.getPlayerType()); // PlayerA, PlayerBはGameクラスから取得し、自身のPlayerTypeを渡す
         int[] bestMove = null;
@@ -105,6 +106,7 @@ public class MinMax extends Player {
                 bestMove = move;
             }
         }
+        game.setSilentMode(false);
         return bestMove;
     }
 

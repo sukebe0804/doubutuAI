@@ -5,7 +5,7 @@ import java.util.Random;
 
 public class AI_gj extends Player {
 
-    private static final int MAX_DEPTH = 5; // 探索の深さ
+    private static final int MAX_DEPTH = 4; // 探索の深さ
     private static final int WIN_SCORE = 100000; // 勝利時の評価点
     private static final int LOSE_SCORE = -100000; // 敗北時の評価点
 
@@ -38,7 +38,7 @@ public class AI_gj extends Player {
 
     @Override
     public int[] chooseMove(Game game) {
-        get.silentMode
+        game.setSilentMode(true);
         // 現在のプレイヤータイプを設定
         this.setPlayerType(game.getCurrentPlayer().getPlayerType());
 
@@ -103,6 +103,7 @@ public class AI_gj extends Player {
                 }
             }
         }
+        game.setSilentMode(false);
         return bestMove;
     }
 

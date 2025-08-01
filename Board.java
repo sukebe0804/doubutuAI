@@ -1,11 +1,16 @@
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
-import java.util.Scanner;
 
 public class Board implements Cloneable {
     private Piece[][] boardArray;
-    public static final int ROWS = 4; // private -> public に変更
-    public static final int COLS = 3; // private -> public に変更
+    public static final int ROWS = 4;
+    public static final int COLS = 3;
+
+    // ANSIカラーコード
+    public static final String ANSI_RESET = "\u001B[0m";
+    public static final String ANSI_GREEN = "\u001B[31m"; // プレイヤー1（先手）
+    public static final String ANSI_RED = "\u001B[32m";   // プレイヤー2（後手）
 
     public Board() {
         boardArray = new Piece[ROWS][COLS];
@@ -48,18 +53,32 @@ public class Board implements Cloneable {
                 if (piece == null) {
                     System.out.print("    |");
                 } else {
-                    System.out.print(" " + piece.getSymbol() + " |");
+                    String color = (piece.getOwner() == PlayerType.PLAYER1) ? ANSI_GREEN : ANSI_RED;
+                    String symbol = piece.isPromoted() ? piece.getSymbol() : piece.getSymbol();
+                    
+                    if (piece.getOwner() == PlayerType.PLAYER2) {
+                        System.out.print(" " + color + reverseString(symbol) + ANSI_RESET + " |");
+                    } else {
+                        System.out.print(" " + color + symbol + ANSI_RESET + " |");
+                    }
                 }
             }
             System.out.println("\n  ----------------");
         }
+    }
+
+    private String reverseString(String s) {
+        if (s == null) {
+            return null;
+        }
+        return new StringBuilder(s).reverse().toString();
     }
     
     @Override
     public Board clone() {
         try {
             Board cloned = (Board) super.clone();
-            cloned.boardArray = new Piece[ROWS][COLS]; // ROWS, COLS を使用
+            cloned.boardArray = new Piece[ROWS][COLS];
             for (int r = 0; r < ROWS; r++) {
                 for (int c = 0; c < COLS; c++) {
                     Piece originalPiece = this.boardArray[r][c];
@@ -72,7 +91,7 @@ public class Board implements Cloneable {
             }
             return cloned;
         } catch (CloneNotSupportedException e) {
-            throw new AssertionError("Board clone failed", e);
+            throw new AssertionError();
         }
     }
 }

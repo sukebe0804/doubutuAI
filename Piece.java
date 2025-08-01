@@ -1,8 +1,8 @@
-import java.util.List; // Listを使うため
+import java.util.List;
 
 public abstract class Piece implements Cloneable {
-    protected PlayerType owner; // どちらのプレイヤーの駒か
-    protected boolean isPromoted; // 成り駒かどうか
+    protected PlayerType owner;
+    protected boolean isPromoted;
 
     public Piece(PlayerType owner) {
         this.owner = owner;
@@ -13,6 +13,10 @@ public abstract class Piece implements Cloneable {
         return owner;
     }
 
+    public void setOwner(PlayerType newOwner) {
+        this.owner = newOwner;
+    }
+
     public boolean isPromoted() {
         return isPromoted;
     }
@@ -21,35 +25,21 @@ public abstract class Piece implements Cloneable {
         this.isPromoted = true;
     }
 
-    /**
-     * 駒の成り状態を解除します。
-     */
     public void unPromote() {
         this.isPromoted = false;
     }
 
-    /**
-     * 駒の所有者を設定します。
-     * @param owner 新しい所有者
-     */
-    public void setOwner(PlayerType owner) {
-        this.owner = owner;
-    }
-
-    // 各駒が移動可能な相対的な座標のリストを返す抽象メソッド
-    // これを各具象駒クラスで実装する
     public abstract List<int[]> getPossibleMoves(int currentRow, int currentCol, Board board);
 
-    // 盤面表示用のシンボル
     public abstract String getSymbol();
-    // Pieceクラスまたはそのサブクラスに追加
-    //clone()実装
+
     @Override
     public Piece clone() {
-	try {
-	    return (Piece) super.clone();
-	} catch (CloneNotSupportedException e) {
-	    throw new AssertionError(); // 発生しない
-	}
+        try {
+            Piece cloned = (Piece) super.clone();
+            return cloned;
+        } catch (CloneNotSupportedException e) {
+            throw new AssertionError();
+        }
     }
 }
